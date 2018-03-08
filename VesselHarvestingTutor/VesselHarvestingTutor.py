@@ -153,7 +153,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       self.retractorModel.GetDisplayNode().SetColor(0.9, 0.9, 0.9)
 
   def run(self):
-    #self.loadTransforms()
+    self.loadTransforms()
     self.loadModels()
     return True
 
