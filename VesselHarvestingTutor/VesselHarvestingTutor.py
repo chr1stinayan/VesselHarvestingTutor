@@ -120,9 +120,11 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
 
     logic = VesselHarvestingTutorLogic()
     logic.loadModels()
+    logic.loadTransforms()
 
     # Refresh Apply button state
     #self.onSelect()
+    
 
   def cleanup(self):
     pass
@@ -141,9 +143,18 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
 class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
 
   def loadTransforms(self):
+    moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
+  
     self.vesselToRetractor = slicer.util.getNode('VesselToRetractor')
     self.triggerToCutter = slicer.util.getNode('TriggerToCutter')
     self.cutterToRetractor = slicer.util.getNode('CutterToRetractor')
+    
+    self.cutterTipToCutter = slicer.util.getNode('CutterTipToCutter')
+    if self.cutterTipToCutter == None:
+      filePath = os.path.join(moduleDir, os.pardir, 'Transforms', 'CutterTipToCutter.h5')
+      [success, self.cutterTipToCutter] = slicer.util.loadTransform(filePath, returnNode=True)
+      self.cutterTipToCutter.SetName('CutterTipToCutter')
+    
 
   def loadModels(self):
     moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
@@ -168,10 +179,9 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, self.cutterMovingModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
       self.cutterMovingModel.SetName('CutterMovingModel')
       self.cutterMovingModel.GetDisplayNode().SetColor(0.8, 0.9, 1.0)
-
+   
 
   def run(self):
-    self.loadTransforms()
     return True
 
 
@@ -192,6 +202,7 @@ class VesselHarvestingTutorTest(ScriptedLoadableModuleTest):
     """
     self.setUp()
     self.test_VesselHarvestingTutor1()
+    
 
   def test_VesselHarvestingTutor1(self):
     """ Ideally you should have several levels of tests.  At the lowest level
@@ -205,26 +216,8 @@ class VesselHarvestingTutorTest(ScriptedLoadableModuleTest):
     your test should break so they know that the feature is needed.
     """
 
-    self.delayDisplay("Starting the test")
-    #
-    # first, get some data
-    #
-    import urllib
-    downloads = (
-        ('http://slicer.kitware.com/midas3/download?items=5767', 'FA.nrrd', slicer.util.loadVolume),
-        )
-
-    for url,name,loader in downloads:
-      filePath = slicer.app.temporaryPath + '/' + name
-      if not os.path.exists(filePath) or os.stat(filePath).st_size == 0:
-        logging.info('Requesting download %s from %s...\n' % (name, url))
-        urllib.urlretrieve(url, filePath)
-      if loader:
-        logging.info('Loading %s...' % (name,))
-        loader(filePath)
-    self.delayDisplay('Finished with download and loading')
-
-    volumeNode = slicer.util.getNode(pattern="FA")
     logic = VesselHarvestingTutorLogic()
-    self.assertIsNotNone( logic.hasImageData(volumeNode) )
-    self.delayDisplay('Test passed!')
+    logic.loadModels()
+    logic.loadTransforms()
+    
+    
