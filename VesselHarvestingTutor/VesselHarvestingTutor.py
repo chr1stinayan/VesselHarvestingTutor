@@ -119,9 +119,9 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     self.layout.addStretch(1)
 
     logic = VesselHarvestingTutorLogic()
-    logic.loadModels()
     logic.loadTransforms()
-
+    logic.loadModels()
+    
     # Refresh Apply button state
     #self.onSelect()
     
@@ -147,13 +147,20 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
   
     self.vesselToRetractor = slicer.util.getNode('VesselToRetractor')
     self.triggerToCutter = slicer.util.getNode('TriggerToCutter')
-    self.cutterToRetractor = slicer.util.getNode('CutterToRetractor')
     
-    self.cutterTipToCutter = slicer.util.getNode('CutterTipToCutter')
-    if self.cutterTipToCutter == None:
+    cutterToRetractor = slicer.util.getNode('CutterToRetractor')
+    if cutterToRetractor == None:
+      cutterToRetractor = slicer.vtkMRMLLinearTransformNode()
+      cutterToRetractor.SetName('CutterToRetractor')
+      slicer.mrmlScene.AddNode(cutterToRetractor)
+    
+    cutterTipToCutter = slicer.util.getNode('CutterTipToCutter')
+    if cutterTipToCutter == None:
       filePath = os.path.join(moduleDir, os.pardir, 'Transforms', 'CutterTipToCutter.h5')
-      [success, self.cutterTipToCutter] = slicer.util.loadTransform(filePath, returnNode=True)
-      self.cutterTipToCutter.SetName('CutterTipToCutter')
+      [success, cutterTipToCutter] = slicer.util.loadTransform(filePath, returnNode=True)
+      cutterTipToCutter.SetName('CutterTipToCutter')
+    
+    cutterTipToCutter.SetAndObserveTransformNodeID(cutterToRetractor.GetID())
     
 
   def loadModels(self):
@@ -172,6 +179,12 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, self.cutterBaseModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
       self.cutterBaseModel.SetName('CutterBaseModel')
       self.cutterBaseModel.GetDisplayNode().SetColor(0.8, 0.9, 1.0)
+
+    cutterTipToCutter = slicer.util.getNode('CutterTipToCutter')
+    if cutterTipToCutter == None:
+      logging.error('Load transforms before models!')
+      return
+    self.cutterBaseModel.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
     
     self.cutterMovingModel = slicer.util.getNode('CutterMovingModel')
     if self.cutterMovingModel == None:
@@ -217,7 +230,7 @@ class VesselHarvestingTutorTest(ScriptedLoadableModuleTest):
     """
 
     logic = VesselHarvestingTutorLogic()
-    logic.loadModels()
     logic.loadTransforms()
-    
+    logic.loadModels()
+
     
