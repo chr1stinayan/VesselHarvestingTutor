@@ -2,7 +2,7 @@
 
   <DataCollection StartupDelaySec="1.0" >
     <DeviceSet 
-      Name="Telemed L12 50mm Ascension (black probe clip)"
+      Name="Vessel Harvesting Ascension"
       Description="EM sensors: 1 Retractor, 2 Trigger, 3 Cutter 4 Reference." 
     />
 
