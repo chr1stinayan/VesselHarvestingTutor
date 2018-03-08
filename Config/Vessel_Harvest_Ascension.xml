@@ -3,7 +3,7 @@
   <DataCollection StartupDelaySec="1.0" >
     <DeviceSet 
       Name="Vessel Harvesting Ascension"
-      Description="EM sensors: 1 Retractor, 2 Trigger, 3 Cutter 4 Reference." 
+      Description="EM sensors: 1 Retractor, 2 Trigger, 3 Cutter 4 Vessel." 
     />
 
     <Device
@@ -69,9 +69,9 @@
         <Message Type="TRANSFORM" />
       </MessageTypes>
       <TransformNames>
-	    <Transform Name="CutterToReference" />
-		<Transform Name="TriggerToReference" />
-		<Transform Name="RetractorToReference" />
+	    <Transform Name="TriggerToCutter" />
+		<Transform Name="CutterToRetractor" />
+		<Transform Name="VesselToRetractor" />
       </TransformNames>
     </DefaultClientInfo>
   </PlusOpenIGTLinkServer>

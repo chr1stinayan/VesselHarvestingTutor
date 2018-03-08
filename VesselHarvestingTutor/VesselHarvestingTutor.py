@@ -138,18 +138,23 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
 class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
 
   def loadTransforms(self):
-    self.retractorToReference = slicer.util.getNode('RetractorToReference')
-    self.triggerToReference = slicer.util.getNode('TriggerToReference')
-    self.cutterToReference = slicer.util.getNode('CutterToReference')
+    self.vesselToRetractor = slicer.util.getNode('VesselToRetractor')
+    self.triggerToCutter = slicer.util.getNode('TriggerToCutter')
+    self.cutterToRetractor = slicer.util.getNode('CutterToRetractor')
 
   def loadModels(self):
-    self.retractorModel= slicer.util.
-    self.triggerModel = 0
-    self.cutterModel = 0
+    moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
+    
+    self.retractorModel= slicer.util.getNode('RetractorModel')
+    if not self.retractorModel:
+      modelFilePath = os.path.join(moduleDir, os.pardir,'CadModels', 'VesselRetractorHead.stl')
+      [success, self.retractorModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
+      self.retractorModel.SetName('RetractorModel')
+      self.retractorModel.GetDisplayNode().SetColor(0.9, 0.9, 0.9)
 
   def run(self):
-    loadTransforms()
-    loadModels()
+    #self.loadTransforms()
+    self.loadModels()
     return True
 
 
