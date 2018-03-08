@@ -118,6 +118,9 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     # Add vertical spacer
     self.layout.addStretch(1)
 
+    logic = VesselHarvestingTutorLogic()
+    logic.loadModels()
+
     # Refresh Apply button state
     #self.onSelect()
 
@@ -151,10 +154,24 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, self.retractorModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
       self.retractorModel.SetName('RetractorModel')
       self.retractorModel.GetDisplayNode().SetColor(0.9, 0.9, 0.9)
+    
+    self.cutterBaseModel = slicer.util.getNode('CutterBaseModel')
+    if self.cutterBaseModel == None:
+      modelFilePath = os.path.join(moduleDir, os.pardir, 'CadModels', 'CutterBaseModel.stl')
+      [success, self.cutterBaseModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
+      self.cutterBaseModel.SetName('CutterBaseModel')
+      self.cutterBaseModel.GetDisplayNode().SetColor(0.8, 0.9, 1.0)
+    
+    self.cutterMovingModel = slicer.util.getNode('CutterMovingModel')
+    if self.cutterMovingModel == None:
+      modelFilePath = os.path.join(moduleDir, os.pardir, 'CadModels', 'CutterMovingModel.stl')
+      [success, self.cutterMovingModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
+      self.cutterMovingModel.SetName('CutterMovingModel')
+      self.cutterMovingModel.GetDisplayNode().SetColor(0.8, 0.9, 1.0)
+
 
   def run(self):
     self.loadTransforms()
-    self.loadModels()
     return True
 
 
