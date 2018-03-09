@@ -146,7 +146,11 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
   
     self.vesselToRetractor = slicer.util.getNode('VesselToRetractor')
-    self.triggerToCutter = slicer.util.getNode('TriggerToCutter')
+    triggerToCutter = slicer.util.getNode('TriggerToCutter')
+    if triggerToCutter == None:
+      triggerToCutter = slicer.vtkMRMLLinearTransformNode()
+      triggerToCutter.SetName('TriggerToCutter')
+      slicer.mrmlScene.AddNode(triggerToCutter)
     
     cutterToRetractor = slicer.util.getNode('CutterToRetractor')
     if cutterToRetractor == None:
@@ -168,7 +172,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     
     cutterTipToCutter.SetAndObserveTransformNodeID(cutterToRetractor.GetID())
     cutterMovingToTip.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
-    cutterMovingToTip.AddObserver(slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.updateTransforms)
+    triggerToCutter.AddObserver(slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.updateTransforms)
 
 
   def loadModels(self):
@@ -211,7 +215,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     return True
   
   
-  def updateTransforms(self):
+  def updateTransforms(self, event, caller):
     
     triggerToCutter = slicer.util.getNode('TriggerToCutter')
     if triggerToCutter == None:
@@ -222,8 +226,25 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     
     angles = triggerToCutterTransform.GetOrientation()
     
+    # Todo: Implement cutter angle computation as outlined below
+    
+    # Compute the long axis of the cutter tool
+    
+    # Find direction of the trigger sensor (where the cable points at)
+    
+    # Compute angle between cutter long axis and trigger sensor
+    
+    # Find and compute mapping from trigger angle to cutter angle
+    
     cutterMovingToTipTransform = vtk.vtkTransform()
-    cutterMovingToTipTransform.RotateY(angles[1]*10)
+    
+    # By default transformations occur in reverse order compared to code. So this part needs to be read from last to first.
+    # Translate center of rotation back to the original position
+    cutterMovingToTipTransform.Translate(0,0,20)
+    # Rotate cutter moving part
+    cutterMovingToTipTransform.RotateY(angles[1]*-3)
+    # Translate center of rotation of the moving part to origin
+    cutterMovingToTipTransform.Translate(0,0,-20)
     
     cutterMovingToTip = slicer.util.getNode('CutterMovingToCutterTip')
     cutterMovingToTip.SetAndObserveTransformToParent(cutterMovingToTipTransform)
