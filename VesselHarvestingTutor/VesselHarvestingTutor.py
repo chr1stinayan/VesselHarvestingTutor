@@ -154,6 +154,12 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       cutterToRetractor.SetName('CutterToRetractor')
       slicer.mrmlScene.AddNode(cutterToRetractor)
     
+    cutterMovingToTip = slicer.util.getNode('CutterMovingToCutterTip')
+    if cutterMovingToTip == None:
+      cutterMovingToTip = slicer.vtkMRMLLinearTransformNode()
+      cutterMovingToTip.SetName('CutterMovingToCutterTip')
+      slicer.mrmlScene.AddNode(cutterMovingToTip)
+    
     cutterTipToCutter = slicer.util.getNode('CutterTipToCutter')
     if cutterTipToCutter == None:
       filePath = os.path.join(moduleDir, os.pardir, 'Transforms', 'CutterTipToCutter.h5')
@@ -161,7 +167,9 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       cutterTipToCutter.SetName('CutterTipToCutter')
     
     cutterTipToCutter.SetAndObserveTransformNodeID(cutterToRetractor.GetID())
-    
+    cutterMovingToTip.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
+    cutterMovingToTip.AddObserver(vtk.vtkCommand.ModifiedEvent, self.updateTransforms)
+
 
   def loadModels(self):
     moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
@@ -192,10 +200,33 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, self.cutterMovingModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
       self.cutterMovingModel.SetName('CutterMovingModel')
       self.cutterMovingModel.GetDisplayNode().SetColor(0.8, 0.9, 1.0)
-   
+
+    cutterMovingToTip = slicer.util.getNode('CutterMovingToCutterTip')
+    if cutterMovingToTip == None:
+      logging.error('Load transforms before models!')
+      return
+    self.cutterMovingModel.SetAndObserveTransformNodeID(cutterMovingToTip.GetID())
 
   def run(self):
     return True
+  
+  
+  def updateTransforms(self):
+    
+    triggerToCutter = slicer.util.getNode('TriggerToCutter')
+    if triggerToCutter == None:
+      logging.error('Could not found TriggerToCutter!')
+      return
+    
+    triggerToCutterTransform = triggerToCutter.GetTransformToParent()
+    
+    angles = triggerToCutterTransform.GetOrientation()
+    
+    cutterMovingToTipTransform = vtk.vtkTransform()
+    cutterMovingToTipTransform.RotateY(angles[0])
+    
+    cutterMovingToTip = slicer.util.getNode('CutterMovingToCutterTip')
+    cutterMovingToTip.SetAndObserveTransformToParent(cutterMovingToTipTransform)
 
 
 class VesselHarvestingTutorTest(ScriptedLoadableModuleTest):
