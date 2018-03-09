@@ -168,7 +168,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     
     cutterTipToCutter.SetAndObserveTransformNodeID(cutterToRetractor.GetID())
     cutterMovingToTip.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
-    cutterMovingToTip.AddObserver(vtk.vtkCommand.ModifiedEvent, self.updateTransforms)
+    cutterMovingToTip.AddObserver(slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.updateTransforms)
 
 
   def loadModels(self):
@@ -223,7 +223,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     angles = triggerToCutterTransform.GetOrientation()
     
     cutterMovingToTipTransform = vtk.vtkTransform()
-    cutterMovingToTipTransform.RotateY(angles[0])
+    cutterMovingToTipTransform.RotateY(angles[1]*10)
     
     cutterMovingToTip = slicer.util.getNode('CutterMovingToCutterTip')
     cutterMovingToTip.SetAndObserveTransformToParent(cutterMovingToTipTransform)
