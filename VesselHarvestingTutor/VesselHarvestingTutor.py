@@ -161,6 +161,13 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, self.cutterBaseModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
       self.cutterBaseModel.SetName('CutterBaseModel')
       self.cutterBaseModel.GetDisplayNode().SetColor(0.8, 0.9, 1.0)
+	  
+    self.vesselModel= slicer.util.getNode('VesselModel')
+    if not self.vesselModel:
+      modelFilePath = os.path.join(moduleDir, os.pardir,'CadModels', 'VesselModel.vtk')
+      [success, self.vesselModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
+      self.vesselModel.SetName('VesselModel')
+      self.vesselModel.GetDisplayNode().SetColor(1, 0, 0)
 
     cutterTipToCutter = slicer.util.getNode('CutterTipToCutter')
     if cutterTipToCutter == None:
@@ -180,6 +187,18 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       logging.error('Load transforms before models!')
       return
     self.cutterMovingModel.SetAndObserveTransformNodeID(cutterMovingToTip.GetID())
+	
+    self.vesselModelToVessel = slicer.util.getNode('VesselModelToVessel')
+    if not self.vesselModelToVessel:
+      transformFilePath = os.path.join(moduleDir, os.pardir,'Transforms', 'VesselModelToVessel.h5')
+      [success, self.vesselModelToVessel] = slicer.util.loadTransform(transformFilePath, returnNode=True)
+      if success == False:
+        logging.error('Could not read needle tip to needle transform!')
+      else:
+        self.vesselModelToVessel.SetName("VesselModelToVessel")
+    self.vesselModel.SetAndObserveTransformNodeID(self.vesselModelToVessel.GetID())
+
+	
 
   def run(self):
     return True
@@ -208,12 +227,12 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     
     print "triggerAngle_Deg: " + str(triggerAngle_Deg)
     
-    if triggerAngle_Deg < 82.0:
-      triggerAngle_Deg = 82.0
+    if triggerAngle_Deg < 86.0:
+      triggerAngle_Deg = 86.0
     if triggerAngle_Deg > 102.0:
       triggerAngle_Deg = 102.0
     
-    openAngle = (triggerAngle_Deg - 82.0) * -2.2
+    openAngle = (triggerAngle_Deg - 86.0) * -2.2
     cutterMovingToTipTransform = vtk.vtkTransform()
     
     # By default transformations occur in reverse order compared to source code line order.
