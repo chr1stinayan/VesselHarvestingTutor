@@ -84,36 +84,12 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     parametersFormLayout.addRow("Output Volume: ", self.outputSelector)
 
     #
-    # threshold value
-    #
-    self.imageThresholdSliderWidget = ctk.ctkSliderWidget()
-    self.imageThresholdSliderWidget.singleStep = 0.1
-    self.imageThresholdSliderWidget.minimum = -100
-    self.imageThresholdSliderWidget.maximum = 100
-    self.imageThresholdSliderWidget.value = 0.5
-    self.imageThresholdSliderWidget.setToolTip("Set threshold value for computing the output image. Voxels that have intensities lower than this value will set to zero.")
-    parametersFormLayout.addRow("Image threshold", self.imageThresholdSliderWidget)
-
-    #
     # check box to trigger taking screen shots for later use in tutorials
     #
     self.enableScreenshotsFlagCheckBox = qt.QCheckBox()
     self.enableScreenshotsFlagCheckBox.checked = 0
     self.enableScreenshotsFlagCheckBox.setToolTip("If checked, take screen shots for tutorials. Use Save Data to write them to disk.")
     parametersFormLayout.addRow("Enable Screenshots", self.enableScreenshotsFlagCheckBox)
-
-    #
-    # Apply Button
-    #
-    self.addToolsButton = qt.QPushButton("Add Tools")
-    self.addToolsButton.toolTip = "Add Tools to Scene."
-    self.addToolsButton.enabled = True
-    parametersFormLayout.addRow(self.addToolsButton)
-
-    # connections
-    self.addToolsButton.connect('clicked(bool)', self.onAddToolsButton)
-    self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
-    self.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
 
     # Add vertical spacer
     self.layout.addStretch(1)
@@ -129,12 +105,6 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
   def cleanup(self):
     pass
 
-  def onSelect(self):
-    self.addToolsButton.enabled = self.inputSelector.currentNode() and self.outputSelector.currentNode()
-
-  def onAddToolsButton(self):
-    logic = VesselHarvestingTutorLogic()
-    logic.run()
 
 #
 # VesselHarvestingTutorLogic
@@ -217,10 +187,11 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
   
   def updateTransforms(self, event, caller):
     
-    triggerToCutter = slicer.util.getNode('TriggerToCutter')
+    triggerToCutter = slicer.mrmlScene.GetFirstNodeByName('TriggerToCutter')
+    
     if triggerToCutter == None:
       logging.error('Could not found TriggerToCutter!')
-      return
+      #return
     
     triggerToCutterTransform = triggerToCutter.GetTransformToParent()
     
@@ -228,25 +199,32 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     
     # Todo: Implement cutter angle computation as outlined below
     
-    # Compute the long axis of the cutter tool
+    shaftDirection_Cutter = [0,1,0]
+    triggerDirection_Trigger = [1,0,0]
+    triggerDirection_Cutter = triggerToCutterTransform.TransformFloatVector(triggerDirection_Trigger)
     
-    # Find direction of the trigger sensor (where the cable points at)
+    triggerAngle_Rad = vtk.vtkMath().AngleBetweenVectors(triggerDirection_Cutter, shaftDirection_Cutter)
+    triggerAngle_Deg = vtk.vtkMath().DegreesFromRadians(triggerAngle_Rad)
     
-    # Compute angle between cutter long axis and trigger sensor
+    print "triggerAngle_Deg: " + str(triggerAngle_Deg)
     
-    # Find and compute mapping from trigger angle to cutter angle
+    if triggerAngle_Deg < 82.0:
+      triggerAngle_Deg = 82.0
+    if triggerAngle_Deg > 102.0:
+      triggerAngle_Deg = 102.0
     
+    openAngle = (triggerAngle_Deg - 82.0) * -2.2
     cutterMovingToTipTransform = vtk.vtkTransform()
     
-    # By default transformations occur in reverse order compared to code. So this part needs to be read from last to first.
+    # By default transformations occur in reverse order compared to source code line order.
     # Translate center of rotation back to the original position
-    cutterMovingToTipTransform.Translate(0,0,20)
-    # Rotate cutter moving part
-    cutterMovingToTipTransform.RotateY(angles[1]*-3)
-    # Translate center of rotation of the moving part to origin
     cutterMovingToTipTransform.Translate(0,0,-20)
+    # Rotate cutter moving part
+    cutterMovingToTipTransform.RotateY(openAngle)
+    # Translate center of rotation of the moving part to origin
+    cutterMovingToTipTransform.Translate(0,0,20)
     
-    cutterMovingToTip = slicer.util.getNode('CutterMovingToCutterTip')
+    cutterMovingToTip = slicer.mrmlScene.GetFirstNodeByName('CutterMovingToCutterTip')
     cutterMovingToTip.SetAndObserveTransformToParent(cutterMovingToTipTransform)
 
 
@@ -257,30 +235,20 @@ class VesselHarvestingTutorTest(ScriptedLoadableModuleTest):
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
 
-  def setUp(self):
-    """ Do whatever is needed to reset the state - typically a scene clear will be enough.
-    """
-    slicer.mrmlScene.Clear(0)
-
   def runTest(self):
     """Run as few or as many tests as needed here.
     """
     self.setUp()
     self.test_VesselHarvestingTutor1()
-    
+
+
+  def setUp(self):
+    """ Do whatever is needed to reset the state - typically a scene clear will be enough.
+    """
+    slicer.mrmlScene.Clear(0)
+
 
   def test_VesselHarvestingTutor1(self):
-    """ Ideally you should have several levels of tests.  At the lowest level
-    tests should exercise the functionality of the logic with different inputs
-    (both valid and invalid).  At higher levels your tests should emulate the
-    way the user would interact with your code and confirm that it still works
-    the way you intended.
-    One of the most important features of the tests is that it should alert other
-    developers when their changes will have an impact on the behavior of your
-    module.  For example, if a developer removes a feature that you depend on,
-    your test should break so they know that the feature is needed.
-    """
-
     logic = VesselHarvestingTutorLogic()
     logic.loadTransforms()
     logic.loadModels()
