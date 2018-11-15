@@ -3,6 +3,7 @@ import unittest
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 import logging
+import time
 
 #
 # VesselHarvestingTutor
@@ -15,10 +16,10 @@ class VesselHarvestingTutor(ScriptedLoadableModule):
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "VesselHarvestingTutor" # TODO make this more human readable by adding spaces
-    self.parent.categories = ["Examples"]
+    self.parent.title = "Vessel Harvesting Tutor" 
+    self.parent.categories = ["IGT"]
     self.parent.dependencies = []
-    self.parent.contributors = ["John Doe (AnyWare Corp.)"] # replace with "Firstname Lastname (Organization)"
+    self.parent.contributors = ["Perk Lab"] 
     self.parent.helpText = """
 This is an example of scripted loadable module bundled in an extension.
 It performs a simple thresholding on the input volume and optionally captures a screenshot.
@@ -40,6 +41,7 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
 
   def setup(self):
     ScriptedLoadableModuleWidget.setup(self)
+    self.runTutor = False
 
     # Instantiate and connect widgets ...
 
@@ -91,8 +93,87 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     self.enableScreenshotsFlagCheckBox.setToolTip("If checked, take screen shots for tutorials. Use Save Data to write them to disk.")
     parametersFormLayout.addRow("Enable Screenshots", self.enableScreenshotsFlagCheckBox)
 
-    # Add vertical spacer
-    self.layout.addStretch(1)
+
+    #
+    # EVH Tutor Accordion
+    #
+    evhTutorCollapsibleButton = ctk.ctkCollapsibleButton()
+    evhTutorCollapsibleButton.text = "Endovein Harvesting Tutor"
+    self.layout.addWidget(evhTutorCollapsibleButton)
+    evhTutorFormLayout = qt.QFormLayout(evhTutorCollapsibleButton)
+
+    # Button to start recording with EVH tutor
+    self.runTutorButton = qt.QPushButton("Start Recording")
+    self.runTutorButton.toolTip = "Starts EVH tutor and recording practice procedure."
+    self.runTutorButton.enabled = True
+    self.runTutorButton.connect('clicked(bool)', self.onRunTutorButton)
+    evhTutorFormLayout.addRow(self.runTutorButton)
+  
+    '''# Button to stop recording with EVH Tutor
+    self.stopTutorButton = qt.QPushButton("Stop Recording")
+    self.stopTutorButton.toolTip = "Stops EVH tutor and recording practice procedure."
+    self.stopTutorButton.enabled = True
+    self.stopTutorButton.connect('clicked(bool)', self.onStopTutorButton)
+    evhTutorFormLayout.addRow(self.stopTutorButton)'''
+
+    # Smallest angle between retractor and vessel axis
+    self.minAngleDescriptionLabel = qt.QLabel("Smallest Angle Between Retractor and Vessel:")
+    self.minAngleDescriptionLabel.setVisible(False)
+    self.minAngleValueLabel = qt.QLabel("0")
+    self.minAngleValueLabel.setVisible(False)
+    self.minAngleValueLabel.setAlignment(0x0002) # Align right
+    evhTutorFormLayout.addRow(self.minAngleDescriptionLabel, self.minAngleValueLabel)
+
+    # Maximum angle between retractor and vessel axis
+    self.maxAngleDescriptionLabel = qt.QLabel("Largest Angle Between Retractor and Vessel:")
+    self.maxAngleDescriptionLabel.setVisible(False)
+    self.maxAngleValueLabel = qt.QLabel("0")
+    self.maxAngleValueLabel.setVisible(False)
+    self.maxAngleValueLabel.setAlignment(0x0002) # Align right
+    evhTutorFormLayout.addRow(self.maxAngleDescriptionLabel, self.maxAngleValueLabel)
+
+    # Minimum distance from vessel
+    self.minDistanceDescriptionLabel = qt.QLabel("Shortest Distance Cut from Dissected Vein:")
+    self.minDistanceDescriptionLabel.setVisible(False)
+    self.minDistanceValueLabel = qt.QLabel("0")
+    self.minDistanceValueLabel.setVisible(False)
+    self.minDistanceValueLabel.setAlignment(0x0002) # Align right
+    evhTutorFormLayout.addRow(self.minDistanceDescriptionLabel, self.minDistanceValueLabel)
+
+    # Maximum distance from vessel
+    self.maxDistanceDescriptionLabel = qt.QLabel("Largest Distance Cut from Dissected vein:")
+    self.maxDistanceDescriptionLabel.setVisible(False)
+    self.maxDistanceValueLabel = qt.QLabel("0")
+    self.maxDistanceValueLabel.setVisible(False)
+    self.maxDistanceValueLabel.setAlignment(0x0002) # Align right
+    evhTutorFormLayout.addRow(self.maxDistanceDescriptionLabel, self.maxDistanceValueLabel)
+
+    # Number of cutter rotations 
+    self.numRotationsDescriptionLabel = qt.QLabel("Total Number of Tool Rotations:")
+    self.numRotationsDescriptionLabel.setVisible(False)
+    self.numRotationsValueLabel = qt.QLabel("0")
+    self.numRotationsValueLabel.setVisible(False)
+    self.numRotationsValueLabel.setAlignment(0x0002) # Align right
+    evhTutorFormLayout.addRow(self.numRotationsDescriptionLabel, self.numRotationsValueLabel)
+
+    # Time label of practice procedure
+    self.procedureTimeDescriptionLabel = qt.QLabel("Total Procedure Time:")
+    self.procedureTimeDescriptionLabel.setVisible(False)
+    self.procedureTimeValueLabel = qt.QLabel("")
+    self.procedureTimeValueLabel.setVisible(False)
+    self.procedureTimeValueLabel.setAlignment(0x0002) # Align right
+    evhTutorFormLayout.addRow(self.procedureTimeDescriptionLabel, self.procedureTimeValueLabel)
+
+    # Button to display retractor trajectory 
+    self.showPathButton = qt.QPushButton("Reconstruct retractor trajectory")
+    self.showPathButton.toolTip = "Visualize retractor trajectory overlayed on vessel model."
+    self.showPathButton.setVisible(False)
+    self.showPathButton.enabled = True
+    self.showPathButton.connect('clicked(bool)', self.onShowPathButton)
+    evhTutorFormLayout.addRow(self.showPathButton)
+
+    # Add vertical spacing in EVH Tutor accordion 
+    self.layout.addStretch(35)
 
     logic = VesselHarvestingTutorLogic()
     logic.loadTransforms()
@@ -101,6 +182,80 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     # Refresh Apply button state
     #self.onSelect()
     
+
+  def onRunTutorButton(self):
+    if not self.runTutor: # if tutor is not running, start it 
+      self.onStartTutorButton()
+    else: # stop active tutor 
+      self.onStopTutorButton()
+
+  def onStartTutorButton(self):
+      self.runTutorButton.setText("Stop Recording")
+      self.runTutorButton.toolTip = "Stops EVH tutor and recording practice procedure."
+      self.runTutor = not self.runTutor
+
+      self.minAngleDescriptionLabel.setVisible(False)
+      self.minAngleValueLabel.setVisible(False)
+
+      self.maxAngleDescriptionLabel.setVisible(False)
+      self.maxAngleValueLabel.setVisible(False)
+
+      self.minDistanceDescriptionLabel.setVisible(False)
+      self.minDistanceValueLabel.setVisible(False)
+
+      self.maxDistanceDescriptionLabel.setVisible(False)
+      self.maxDistanceValueLabel.setVisible(False)
+
+      self.numRotationsDescriptionLabel.setVisible(False)
+      self.numRotationsValueLabel.setVisible(False)
+
+      self.procedureTimeDescriptionLabel.setVisible(False)
+      self.procedureTimeValueLabel.setVisible(False)
+
+      self.showPathButton.setVisible(False)
+
+      self.startTime = time.time()
+      logic = VesselHarvestingTutorLogic()
+      logic.runTutor()
+  
+
+  def onStopTutorButton(self):    
+    logic = VesselHarvestingTutorLogic()
+    self.runTutorButton.setText("Start Recording")
+    self.runTutor = not self.runTutor
+    
+    # Calculate total procedure time 
+    stopTime = time.time() 
+    timeTaken = logic.getTimestamp(self.startTime, stopTime)
+    logic.stopTutor()
+
+    self.minAngleDescriptionLabel.setVisible(True)
+    self.minAngleValueLabel.setVisible(True)
+
+    self.maxAngleDescriptionLabel.setVisible(True)
+    self.maxAngleValueLabel.setVisible(True)
+
+    self.minDistanceDescriptionLabel.setVisible(True)
+    self.minDistanceValueLabel.setVisible(True)
+
+    self.maxDistanceDescriptionLabel.setVisible(True)
+    self.maxDistanceValueLabel.setVisible(True)
+
+    self.numRotationsDescriptionLabel.setVisible(True)
+    self.numRotationsValueLabel.setVisible(True)
+
+    self.procedureTimeValueLabel.setText(timeTaken)
+    self.procedureTimeDescriptionLabel.setVisible(True)
+    self.procedureTimeValueLabel.setVisible(True)
+
+    self.showPathButton.setVisible(True)
+
+
+  def onShowPathButton(self):
+    print 'Reconstructing retractor trajectory ...'
+    # TODO implement path reconstruction
+    pass
+
 
   def cleanup(self):
     pass
@@ -111,6 +266,17 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
 #
 
 class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
+
+  
+  def __init__(self):
+    self.metrics = {
+      'minDistance': 0,
+     'maxDistance': 0,
+      'minAngle': 0,
+      'maxAngle': 0,
+      'numRotations': 0
+    }
+
 
   def loadTransforms(self):
     moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
@@ -139,7 +305,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       filePath = os.path.join(moduleDir, os.pardir, 'Transforms', 'CutterTipToCutter.h5')
       [success, cutterTipToCutter] = slicer.util.loadTransform(filePath, returnNode=True)
       cutterTipToCutter.SetName('CutterTipToCutter')
-    
+
     cutterTipToCutter.SetAndObserveTransformNodeID(cutterToRetractor.GetID())
     cutterMovingToTip.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
     triggerToCutter.AddObserver(slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.updateTransforms)
@@ -198,7 +364,6 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
         self.vesselModelToVessel.SetName("VesselModelToVessel")
     self.vesselModel.SetAndObserveTransformNodeID(self.vesselModelToVessel.GetID())
 
-	
 
   def run(self):
     return True
@@ -246,6 +411,36 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     cutterMovingToTip = slicer.mrmlScene.GetFirstNodeByName('CutterMovingToCutterTip')
     cutterMovingToTip.SetAndObserveTransformToParent(cutterMovingToTipTransform)
 
+    
+    self.updateDistanceMetrics()
+
+  def updateDistanceMetrics(self):
+    #compute the distances here
+    '''
+      get cutter tip
+      get vessel axis 
+      numpy function to get difference
+      update self.metrics
+    '''
+    print 12345
+    
+  
+  def getDistanceMetrics(self):
+    return self.metrics
+
+  
+  def runTutor(self):
+    print "Starting EVH Tutor"
+
+  
+  def stopTutor(self):
+    print "Stopping EVH Tutor"
+
+  def getTimestamp(self, start, stop):
+    elapsed = stop - start 
+    formattedTime = time.strftime('%H:%M:%S', time.gmtime(elapsed)) # convert seconds to HH:MM:SS timestamp
+    return formattedTime
+    
 
 class VesselHarvestingTutorTest(ScriptedLoadableModuleTest):
   """
@@ -271,5 +466,3 @@ class VesselHarvestingTutorTest(ScriptedLoadableModuleTest):
     logic = VesselHarvestingTutorLogic()
     logic.loadTransforms()
     logic.loadModels()
-
-    
