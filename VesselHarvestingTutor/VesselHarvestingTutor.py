@@ -280,7 +280,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
 
   def loadTransforms(self):
     moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
-  
+
     self.vesselToRetractor = slicer.util.getNode('VesselToRetractor')
     triggerToCutter = slicer.util.getNode('TriggerToCutter')
     if triggerToCutter == None:
@@ -305,6 +305,10 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       filePath = os.path.join(moduleDir, os.pardir, 'Transforms', 'CutterTipToCutter.h5')
       [success, cutterTipToCutter] = slicer.util.loadTransform(filePath, returnNode=True)
       cutterTipToCutter.SetName('CutterTipToCutter')
+
+    slicer.modules.markups.logic().AddFiducial()
+    cutterTipFiducial = slicer.util.getNode("vtkMRMLMarkupsFiducialNode1")
+    cutterTipFiducial.SetAndObserveTransformNodeID(cutterMovingToTip.GetID())
 
     cutterTipToCutter.SetAndObserveTransformNodeID(cutterToRetractor.GetID())
     cutterMovingToTip.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
@@ -367,6 +371,13 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
 
   def run(self):
     return True
+
+  def distance(a, b):
+    dist = 0
+    length = len(a)
+    for i in range(length):
+      dist += (a[i] - b[i]) ** 2
+    return math.sqrt(dist)
   
   
   def updateTransforms(self, event, caller):
@@ -387,17 +398,20 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     triggerDirection_Trigger = [1,0,0]
     triggerDirection_Cutter = triggerToCutterTransform.TransformFloatVector(triggerDirection_Trigger)
     
+
     triggerAngle_Rad = vtk.vtkMath().AngleBetweenVectors(triggerDirection_Cutter, shaftDirection_Cutter)
     triggerAngle_Deg = vtk.vtkMath().DegreesFromRadians(triggerAngle_Rad)
     
-    print "triggerAngle_Deg: " + str(triggerAngle_Deg)
-    
-    if triggerAngle_Deg < 86.0:
-      triggerAngle_Deg = 86.0
+    # adjusting values for openAngle calculation 
+    if triggerAngle_Deg < 90.0:
+      triggerAngle_Deg = 90.0
     if triggerAngle_Deg > 102.0:
       triggerAngle_Deg = 102.0
+
+    openAngle = (triggerAngle_Deg - 90.0) * -2.2 # angle of cutter tip to shaft 
+    #print "triggerAngle_Deg: " + str(triggerAngle_Deg), "open ", openAngle #DEBUG
     
-    openAngle = (triggerAngle_Deg - 86.0) * -2.2
+
     cutterMovingToTipTransform = vtk.vtkTransform()
     
     # By default transformations occur in reverse order compared to source code line order.
@@ -410,6 +424,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     
     cutterMovingToTip = slicer.mrmlScene.GetFirstNodeByName('CutterMovingToCutterTip')
     cutterMovingToTip.SetAndObserveTransformToParent(cutterMovingToTipTransform)
+    # fd
 
     
     self.updateDistanceMetrics()
@@ -422,7 +437,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       numpy function to get difference
       update self.metrics
     '''
-    print 12345
+    pass
     
   
   def getDistanceMetrics(self):
