@@ -175,12 +175,22 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     # Add vertical spacing in EVH Tutor accordion 
     self.layout.addStretch(35)
 
+    slicer.modules.markups.logic().AddFiducial()
+    #fidNode = slicer.util.getNode("vtkMRMLMarkupsFiducialNode1")
+    #fidNode.SetNthFiducialLabel(n, "new label")
+    #fidNode.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
+
     logic = VesselHarvestingTutorLogic()
     logic.loadTransforms()
     logic.loadModels()
     
     # Refresh Apply button state
     #self.onSelect()
+
+  def addCutterTipFiducial(self):
+    slicer.modules.markups.logic().AddFiducial()
+    fidNode = slicer.util.getNode("vtkMRMLMarkupsFiducialNode1")
+    fidNode.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
     
 
   def onRunTutorButton(self):
@@ -305,10 +315,6 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       filePath = os.path.join(moduleDir, os.pardir, 'Transforms', 'CutterTipToCutter.h5')
       [success, cutterTipToCutter] = slicer.util.loadTransform(filePath, returnNode=True)
       cutterTipToCutter.SetName('CutterTipToCutter')
-
-    slicer.modules.markups.logic().AddFiducial()
-    cutterTipFiducial = slicer.util.getNode("vtkMRMLMarkupsFiducialNode1")
-    cutterTipFiducial.SetAndObserveTransformNodeID(cutterMovingToTip.GetID())
 
     cutterTipToCutter.SetAndObserveTransformNodeID(cutterToRetractor.GetID())
     cutterMovingToTip.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
