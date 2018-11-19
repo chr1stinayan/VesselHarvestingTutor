@@ -108,13 +108,6 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     self.runTutorButton.enabled = True
     self.runTutorButton.connect('clicked(bool)', self.onRunTutorButton)
     evhTutorFormLayout.addRow(self.runTutorButton)
-  
-    '''# Button to stop recording with EVH Tutor
-    self.stopTutorButton = qt.QPushButton("Stop Recording")
-    self.stopTutorButton.toolTip = "Stops EVH tutor and recording practice procedure."
-    self.stopTutorButton.enabled = True
-    self.stopTutorButton.connect('clicked(bool)', self.onStopTutorButton)
-    evhTutorFormLayout.addRow(self.stopTutorButton)'''
 
     # Smallest angle between retractor and vessel axis
     self.minAngleDescriptionLabel = qt.QLabel("Smallest Angle Between Retractor and Vessel:")
@@ -175,10 +168,9 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     # Add vertical spacing in EVH Tutor accordion 
     self.layout.addStretch(35)
 
-    slicer.modules.markups.logic().AddFiducial()
-    #fidNode = slicer.util.getNode("vtkMRMLMarkupsFiducialNode1")
-    #fidNode.SetNthFiducialLabel(n, "new label")
-    #fidNode.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
+    # Create and set fiducial point on the cutter tip, used to calculate distance metrics
+    self.cutterFiducial = slicer.modules.markups.logic().AddFiducial()
+    # TODO make fiducial invisible
 
     logic = VesselHarvestingTutorLogic()
     logic.loadTransforms()
@@ -187,11 +179,6 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     # Refresh Apply button state
     #self.onSelect()
 
-  def addCutterTipFiducial(self):
-    slicer.modules.markups.logic().AddFiducial()
-    fidNode = slicer.util.getNode("vtkMRMLMarkupsFiducialNode1")
-    fidNode.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
-    
 
   def onRunTutorButton(self):
     if not self.runTutor: # if tutor is not running, start it 
@@ -316,6 +303,8 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, cutterTipToCutter] = slicer.util.loadTransform(filePath, returnNode=True)
       cutterTipToCutter.SetName('CutterTipToCutter')
 
+    fidNode = slicer.util.getNode("F")
+    fidNode.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
     cutterTipToCutter.SetAndObserveTransformNodeID(cutterToRetractor.GetID())
     cutterMovingToTip.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
     triggerToCutter.AddObserver(slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.updateTransforms)
@@ -429,21 +418,32 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     cutterMovingToTipTransform.Translate(0,0,20)
     
     cutterMovingToTip = slicer.mrmlScene.GetFirstNodeByName('CutterMovingToCutterTip')
-    cutterMovingToTip.SetAndObserveTransformToParent(cutterMovingToTipTransform)
-    # fd
+    cutterMovingToTip.SetAndObserveTransformToParent(cutterMovingToTipTransform)   
 
-    
-    self.updateDistanceMetrics()
+    return self.updateDistanceMetrics()
+
 
   def updateDistanceMetrics(self):
     #compute the distances here
     '''
-      get cutter tip
+      DONE - get cutter tip
       get vessel axis 
       numpy function to get difference
       update self.metrics
     '''
-    pass
+    cutterTipWorld = [0,0,0,0]
+    fiducial = slicer.util.getNode("F")
+    fiducial.GetNthFiducialWorldCoordinates(0,cutterTipWorld) # cutterTipWorld now holds the coordinates of 
+    self.vesselModel = slicer.util.getNode('VesselModel') 
+    polydata = self.vesselModel.GetPolyData()
+    numVesselPoints = polydata.GetNumberOfPoints()
+    vesselPoints = [ polydata.GetPoint(i) for i in range(numVesselPoints)]
+    print vesselPoints
+
+    """     #vp = vtk.vtkPointLocator
+        numVesselPoints = vtk.vtkPolyData().GetNumberOfPoints(self.vesselModel)
+        vesselPoints = vtk.vtkPointLocator().GetPoints()
+        print numVesselPoints """
     
   
   def getDistanceMetrics(self):
@@ -456,6 +456,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
   
   def stopTutor(self):
     print "Stopping EVH Tutor"
+
 
   def getTimestamp(self, start, stop):
     elapsed = stop - start 
