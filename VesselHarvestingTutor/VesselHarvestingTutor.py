@@ -4,6 +4,7 @@ import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 import logging
 import time
+import math
 
 #
 # VesselHarvestingTutor
@@ -168,10 +169,7 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     # Add vertical spacing in EVH Tutor accordion 
     self.layout.addStretch(35)
 
-    # Create and set fiducial point on the cutter tip, used to calculate distance metrics
-    self.cutterFiducial = slicer.modules.markups.logic().AddFiducial()
-    # TODO make fiducial invisible
-
+    global logic 
     logic = VesselHarvestingTutorLogic()
     logic.loadTransforms()
     logic.loadModels()
@@ -212,12 +210,10 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
       self.showPathButton.setVisible(False)
 
       self.startTime = time.time()
-      logic = VesselHarvestingTutorLogic()
       logic.runTutor()
   
 
   def onStopTutorButton(self):    
-    logic = VesselHarvestingTutorLogic()
     self.runTutorButton.setText("Start Recording")
     self.runTutor = not self.runTutor
     
@@ -225,6 +221,8 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     stopTime = time.time() 
     timeTaken = logic.getTimestamp(self.startTime, stopTime)
     logic.stopTutor()
+    metrics = logic.getDistanceMetrics()
+    print metrics
 
     self.minAngleDescriptionLabel.setVisible(True)
     self.minAngleValueLabel.setVisible(True)
@@ -233,9 +231,11 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     self.maxAngleValueLabel.setVisible(True)
 
     self.minDistanceDescriptionLabel.setVisible(True)
+    self.minDistanceValueLabel.setText(str(metrics['minDistance']))
     self.minDistanceValueLabel.setVisible(True)
 
     self.maxDistanceDescriptionLabel.setVisible(True)
+    self.maxDistanceValueLabel.setText(str(metrics['maxDistance']))
     self.maxDistanceValueLabel.setVisible(True)
 
     self.numRotationsDescriptionLabel.setVisible(True)
@@ -267,8 +267,8 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
   
   def __init__(self):
     self.metrics = {
-      'minDistance': 0,
-     'maxDistance': 0,
+      'minDistance': 9999999999999999999999999999,
+      'maxDistance': 0,
       'minAngle': 0,
       'maxAngle': 0,
       'numRotations': 0
@@ -303,6 +303,9 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, cutterTipToCutter] = slicer.util.loadTransform(filePath, returnNode=True)
       cutterTipToCutter.SetName('CutterTipToCutter')
 
+    # Create and set fiducial point on the cutter tip, used to calculate distance metrics
+    self.cutterFiducial = slicer.modules.markups.logic().AddFiducial()
+    # TODO make fiducial invisible
     fidNode = slicer.util.getNode("F")
     fidNode.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
     cutterTipToCutter.SetAndObserveTransformNodeID(cutterToRetractor.GetID())
@@ -367,9 +370,9 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
   def run(self):
     return True
 
-  def distance(a, b):
+  def distance(self, a, b):
     dist = 0
-    length = len(a)
+    length = len(b)
     for i in range(length):
       dist += (a[i] - b[i]) ** 2
     return math.sqrt(dist)
@@ -420,30 +423,24 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     cutterMovingToTip = slicer.mrmlScene.GetFirstNodeByName('CutterMovingToCutterTip')
     cutterMovingToTip.SetAndObserveTransformToParent(cutterMovingToTipTransform)   
 
-    return self.updateDistanceMetrics()
+    if math.fabs(openAngle) < 0.5:
+      return self.updateDistanceMetrics()
 
 
   def updateDistanceMetrics(self):
-    #compute the distances here
-    '''
-      DONE - get cutter tip
-      get vessel axis 
-      numpy function to get difference
-      update self.metrics
-    '''
     cutterTipWorld = [0,0,0,0]
     fiducial = slicer.util.getNode("F")
     fiducial.GetNthFiducialWorldCoordinates(0,cutterTipWorld) # cutterTipWorld now holds the coordinates of 
     self.vesselModel = slicer.util.getNode('VesselModel') 
     polydata = self.vesselModel.GetPolyData()
     numVesselPoints = polydata.GetNumberOfPoints()
-    vesselPoints = [ polydata.GetPoint(i) for i in range(numVesselPoints)]
-    print vesselPoints
-
-    """     #vp = vtk.vtkPointLocator
-        numVesselPoints = vtk.vtkPolyData().GetNumberOfPoints(self.vesselModel)
-        vesselPoints = vtk.vtkPointLocator().GetPoints()
-        print numVesselPoints """
+    vesselPoints = [ self.distance(cutterTipWorld, polydata.GetPoint(i)) for i in range(numVesselPoints)]
+    cutDistance = min(vesselPoints)
+    if self.metrics['maxDistance'] < cutDistance:
+      self.metrics['maxDistance'] = round(cutDistance, 2)
+    if self.metrics['minDistance'] > cutDistance:
+      self.metrics['minDistance'] = round(cutDistance, 2)
+    # TODO average cut distance logic 
     
   
   def getDistanceMetrics(self):
