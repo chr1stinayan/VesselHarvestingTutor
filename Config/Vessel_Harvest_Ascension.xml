@@ -29,32 +29,8 @@
 		  <DataSource Id="Vessel"/>
         </OutputChannel>
       </OutputChannels>
-    </Device>
+    </Device> 
 
-    <Device
-      Id="WebcamDevice" 
-      Type="MmfVideo" 
-      FrameSize="640 480"
-      VideoFormat="YUY2"
-      CaptureDeviceId="0" >
-      <DataSources>
-        <DataSource Type="Video" Id="Video" PortUsImageOrientation="MF" ImageType="BRIGHTNESS" />
-      </DataSources>      
-      <OutputChannels>
-        <OutputChannel Id="WebcamStream" VideoDataSourceId="Video" />
-      </OutputChannels>
-    </Device>
-    
-    <Device 
-      Id="WebcamCaptureDevice"
-      Type="VirtualCapture"
-      BaseFilename="WebcamRecording.mhd"
-      EnableCapturingOnStart="FALSE"
-      RequestedFrameRate="15">
-      <InputChannels>
-        <InputChannel Id="WebcamStream" />
-      </InputChannels>
-    </Device>
 
   </DataCollection>
 
@@ -76,20 +52,5 @@
     </DefaultClientInfo>
   </PlusOpenIGTLinkServer>
   
-  <PlusOpenIGTLinkServer
-    MaxNumberOfIgtlMessagesToSend="1"
-    MaxTimeSpentWithProcessingMs="50"
-    ListeningPort="18945"
-    SendValidTransformsOnly="true"
-    OutputChannelId="WebcamStream">
-    <DefaultClientInfo>
-      <MessageTypes>
-        <Message Type="IMAGE" />
-      </MessageTypes>
-      <ImageNames>
-        <Image Name="Webcam" EmbeddedTransformToFrame="Webcam" />
-      </ImageNames>
-    </DefaultClientInfo>
-  </PlusOpenIGTLinkServer>
 
 </PlusConfiguration>

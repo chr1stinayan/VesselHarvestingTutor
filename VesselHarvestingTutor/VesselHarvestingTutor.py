@@ -4,7 +4,7 @@ import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 import logging
 import time
-import math
+import math, numpy
 
 #
 # VesselHarvestingTutor
@@ -43,6 +43,7 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
   def setup(self):
     ScriptedLoadableModuleWidget.setup(self)
     self.runTutor = False
+    self.cutterFiducial = slicer.modules.markups.logic().AddFiducial()
 
     # Instantiate and connect widgets ...
 
@@ -184,7 +185,9 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     else: # stop active tutor 
       self.onStopTutorButton()
 
+
   def onStartTutorButton(self):
+      logic.resetMetrics()
       self.runTutorButton.setText("Stop Recording")
       self.runTutorButton.toolTip = "Stops EVH tutor and recording practice procedure."
       self.runTutor = not self.runTutor
@@ -225,9 +228,11 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     print metrics
 
     self.minAngleDescriptionLabel.setVisible(True)
+    self.minAngleValueLabel.setText(str(metrics['minAngle']) + ' degrees')
     self.minAngleValueLabel.setVisible(True)
 
     self.maxAngleDescriptionLabel.setVisible(True)
+    self.maxAngleValueLabel.setText(str(metrics['maxAngle']) + ' degrees')
     self.maxAngleValueLabel.setVisible(True)
 
     self.minDistanceDescriptionLabel.setVisible(True)
@@ -269,7 +274,17 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     self.metrics = {
       'minDistance': 9999999999999999999999999999,
       'maxDistance': 0,
-      'minAngle': 0,
+      'minAngle': 180,
+      'maxAngle': 0,
+      'numRotations': 0
+    }
+
+
+  def resetMetrics(self):
+    self.metrics = {
+      'minDistance': 9999999999999999999999999999,
+      'maxDistance': 0,
+      'minAngle': 180,
       'maxAngle': 0,
       'numRotations': 0
     }
@@ -304,7 +319,6 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       cutterTipToCutter.SetName('CutterTipToCutter')
 
     # Create and set fiducial point on the cutter tip, used to calculate distance metrics
-    self.cutterFiducial = slicer.modules.markups.logic().AddFiducial()
     # TODO make fiducial invisible
     fidNode = slicer.util.getNode("F")
     fidNode.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
@@ -370,32 +384,36 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
   def run(self):
     return True
 
+
   def distance(self, a, b):
     dist = 0
     length = len(b)
     for i in range(length):
       dist += (a[i] - b[i]) ** 2
     return math.sqrt(dist)
+
+  
+  def calculateVesselToRetractorAngle(self, vesselVector, retractorVector):
+    angleRadians = vtk.vtkMath.AngleBetweenVectors(vesselVector[0:3], retractorVector[0:3])
+    angleDegrees = round(vtk.vtkMath.DegreesFromRadians(angleRadians), 2)
+    if self.metrics['maxAngle'] < angleDegrees:
+      self.metrics['maxAngle'] = angleDegrees
+    elif self.metrics['minAngle'] > angleDegrees:
+      self.metrics['minAngle'] = angleDegrees
   
   
   def updateTransforms(self, event, caller):
     
-    triggerToCutter = slicer.mrmlScene.GetFirstNodeByName('TriggerToCutter')
-    
+    triggerToCutter = slicer.mrmlScene.GetFirstNodeByName('TriggerToCutter')    
     if triggerToCutter == None:
       logging.error('Could not found TriggerToCutter!')
-      #return
-    
-    triggerToCutterTransform = triggerToCutter.GetTransformToParent()
-    
-    angles = triggerToCutterTransform.GetOrientation()
-    
-    # Todo: Implement cutter angle computation as outlined below
-    
+
+    triggerToCutterTransform = triggerToCutter.GetTransformToParent()    
+    angles = triggerToCutterTransform.GetOrientation()    
+    # Todo: Implement cutter angle computation as outlined below    
     shaftDirection_Cutter = [0,1,0]
     triggerDirection_Trigger = [1,0,0]
-    triggerDirection_Cutter = triggerToCutterTransform.TransformFloatVector(triggerDirection_Trigger)
-    
+    triggerDirection_Cutter = triggerToCutterTransform.TransformFloatVector(triggerDirection_Trigger)    
 
     triggerAngle_Rad = vtk.vtkMath().AngleBetweenVectors(triggerDirection_Cutter, shaftDirection_Cutter)
     triggerAngle_Deg = vtk.vtkMath().DegreesFromRadians(triggerAngle_Rad)
@@ -408,10 +426,8 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
 
     openAngle = (triggerAngle_Deg - 90.0) * -2.2 # angle of cutter tip to shaft 
     #print "triggerAngle_Deg: " + str(triggerAngle_Deg), "open ", openAngle #DEBUG
-    
 
     cutterMovingToTipTransform = vtk.vtkTransform()
-    
     # By default transformations occur in reverse order compared to source code line order.
     # Translate center of rotation back to the original position
     cutterMovingToTipTransform.Translate(0,0,-20)
@@ -423,9 +439,33 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     cutterMovingToTip = slicer.mrmlScene.GetFirstNodeByName('CutterMovingToCutterTip')
     cutterMovingToTip.SetAndObserveTransformToParent(cutterMovingToTipTransform)   
 
+    self.updateAngleMetrics()
+
     if math.fabs(openAngle) < 0.5:
       return self.updateDistanceMetrics()
 
+
+  def npArrayFromVtkMatrix(self, vtkMatrix):
+    npArray = numpy.zeros((4,4))
+    for row in range(4):
+      for column in range(4):
+          npArray[row][column] = vtkMatrix.GetElement(row,column)
+    return npArray
+
+    
+  def updateAngleMetrics(self):
+    vesselModelToVessel = slicer.mrmlScene.GetFirstNodeByName('VesselModelToVessel')  
+    vesselToRas = vtk.vtkMatrix4x4()
+    vesselModelToVessel.GetMatrixTransformToWorld(vesselToRas)
+    vesselDirection = numpy.dot(self.npArrayFromVtkMatrix(vesselToRas), numpy.array([ 0, 0, 1, 0]))
+
+    cutterTipToCutter = slicer.mrmlScene.GetFirstNodeByName('CutterTipToCutter')  
+    cutterToRas = vtk.vtkMatrix4x4()
+    cutterTipToCutter.GetMatrixTransformToWorld(cutterToRas)
+    cutterDirection = numpy.dot(self.npArrayFromVtkMatrix(cutterToRas), numpy.array([ 0, 0, 1, 0]))
+
+    self.calculateVesselToRetractorAngle(vesselDirection, cutterDirection)
+    
 
   def updateDistanceMetrics(self):
     cutterTipWorld = [0,0,0,0]
@@ -485,3 +525,4 @@ class VesselHarvestingTutorTest(ScriptedLoadableModuleTest):
     logic = VesselHarvestingTutorLogic()
     logic.loadTransforms()
     logic.loadModels()
+
