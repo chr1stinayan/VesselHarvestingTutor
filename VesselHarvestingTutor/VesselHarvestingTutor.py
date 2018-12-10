@@ -3,8 +3,9 @@ import unittest
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 import logging
-import time
+import time, datetime
 import math, numpy
+import csv
 
 #
 # VesselHarvestingTutor
@@ -46,55 +47,6 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     self.cutterFiducial = slicer.modules.markups.logic().AddFiducial()
 
     # Instantiate and connect widgets ...
-
-    #
-    # Parameters Area
-    #
-    parametersCollapsibleButton = ctk.ctkCollapsibleButton()
-    parametersCollapsibleButton.text = "Parameters"
-    self.layout.addWidget(parametersCollapsibleButton)
-
-    # Layout within the dummy collapsible button
-    parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
-
-    #
-    # input volume selector
-    #
-    self.inputSelector = slicer.qMRMLNodeComboBox()
-    self.inputSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    self.inputSelector.selectNodeUponCreation = True
-    self.inputSelector.addEnabled = False
-    self.inputSelector.removeEnabled = False
-    self.inputSelector.noneEnabled = False
-    self.inputSelector.showHidden = False
-    self.inputSelector.showChildNodeTypes = False
-    self.inputSelector.setMRMLScene( slicer.mrmlScene )
-    self.inputSelector.setToolTip( "Pick the input to the algorithm." )
-    parametersFormLayout.addRow("Input Volume: ", self.inputSelector)
-
-    #
-    # output volume selector
-    #
-    self.outputSelector = slicer.qMRMLNodeComboBox()
-    self.outputSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    self.outputSelector.selectNodeUponCreation = True
-    self.outputSelector.addEnabled = True
-    self.outputSelector.removeEnabled = True
-    self.outputSelector.noneEnabled = True
-    self.outputSelector.showHidden = False
-    self.outputSelector.showChildNodeTypes = False
-    self.outputSelector.setMRMLScene( slicer.mrmlScene )
-    self.outputSelector.setToolTip( "Pick the output to the algorithm." )
-    parametersFormLayout.addRow("Output Volume: ", self.outputSelector)
-
-    #
-    # check box to trigger taking screen shots for later use in tutorials
-    #
-    self.enableScreenshotsFlagCheckBox = qt.QCheckBox()
-    self.enableScreenshotsFlagCheckBox.checked = 0
-    self.enableScreenshotsFlagCheckBox.setToolTip("If checked, take screen shots for tutorials. Use Save Data to write them to disk.")
-    parametersFormLayout.addRow("Enable Screenshots", self.enableScreenshotsFlagCheckBox)
-
 
     #
     # EVH Tutor Accordion
@@ -167,6 +119,14 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     self.showPathButton.connect('clicked(bool)', self.onShowPathButton)
     evhTutorFormLayout.addRow(self.showPathButton)
 
+    # Button to save metrics of practice EVH run
+    self.saveButton= qt.QPushButton("Save metrics")
+    self.saveButton.toolTip = "Save performance metrics to CSV file."
+    self.saveButton.setVisible(False)
+    self.saveButton.enabled = True
+    self.saveButton.connect('clicked(bool)', self.onSaveButton)
+    evhTutorFormLayout.addRow(self.saveButton)
+
     # Add vertical spacing in EVH Tutor accordion 
     self.layout.addStretch(35)
 
@@ -174,9 +134,6 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     logic = VesselHarvestingTutorLogic()
     logic.loadTransforms()
     logic.loadModels()
-    
-    # Refresh Apply button state
-    #self.onSelect()
 
 
   def onRunTutorButton(self):
@@ -225,7 +182,6 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     timeTaken = logic.getTimestamp(self.startTime, stopTime)
     logic.stopTutor()
     metrics = logic.getDistanceMetrics()
-    print metrics
 
     self.minAngleDescriptionLabel.setVisible(True)
     self.minAngleValueLabel.setText(str(metrics['minAngle']) + ' degrees')
@@ -251,12 +207,23 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     self.procedureTimeValueLabel.setVisible(True)
 
     self.showPathButton.setVisible(True)
+    self.saveButton.setVisible(True)
 
 
   def onShowPathButton(self):
     print 'Reconstructing retractor trajectory ...'
     # TODO implement path reconstruction
     pass
+
+  
+  def onSaveButton(self):
+    filename = "C:/Users/cyan/Documents/dev/VesselHarvestingTutor/Data/Evh-Metrics-" + str(datetime.date.today()) + '.csv'
+    metrics = logic.getDistanceMetrics()
+    with open(filename, 'w+') as f:  
+      writer = csv.writer(f, delimiter=',')
+      writer.writerow(['Metric', 'Value']) 
+      for key, value in metrics.items():
+        writer.writerow([key, value]) 
 
 
   def cleanup(self):
@@ -379,6 +346,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       else:
         self.vesselModelToVessel.SetName("VesselModelToVessel")
     self.vesselModel.SetAndObserveTransformNodeID(self.vesselModelToVessel.GetID())
+    self.vesselModelToVessel.SetAndObserveTransformNodeID(self.vesselToRetractor.GetID())
 
 
   def run(self):
