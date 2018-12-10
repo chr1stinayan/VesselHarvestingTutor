@@ -95,13 +95,13 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     self.maxDistanceValueLabel.setAlignment(0x0002) # Align right
     evhTutorFormLayout.addRow(self.maxDistanceDescriptionLabel, self.maxDistanceValueLabel)
 
-    # Number of cutter rotations 
-    self.numRotationsDescriptionLabel = qt.QLabel("Total Number of Tool Rotations:")
-    self.numRotationsDescriptionLabel.setVisible(False)
-    self.numRotationsValueLabel = qt.QLabel("0")
-    self.numRotationsValueLabel.setVisible(False)
-    self.numRotationsValueLabel.setAlignment(0x0002) # Align right
-    evhTutorFormLayout.addRow(self.numRotationsDescriptionLabel, self.numRotationsValueLabel)
+    # Slope of cutter's trajectory 
+    self.trajectorySlopeDescriptionLabel = qt.QLabel("Slope of Linear Trajectory:")
+    self.trajectorySlopeDescriptionLabel.setVisible(False)
+    self.trajectorySlopeValueLabel = qt.QLabel("0")
+    self.trajectorySlopeValueLabel.setVisible(False)
+    self.trajectorySlopeValueLabel.setAlignment(0x0002) # Align right
+    evhTutorFormLayout.addRow(self.trajectorySlopeDescriptionLabel, self.trajectorySlopeValueLabel)
 
     # Time label of practice procedure
     self.procedureTimeDescriptionLabel = qt.QLabel("Total Procedure Time:")
@@ -145,6 +145,7 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
 
   def onStartTutorButton(self):
       logic.resetMetrics()
+      print logic.getDistanceMetrics()
       self.runTutorButton.setText("Stop Recording")
       self.runTutorButton.toolTip = "Stops EVH tutor and recording practice procedure."
       self.runTutor = not self.runTutor
@@ -161,8 +162,8 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
       self.maxDistanceDescriptionLabel.setVisible(False)
       self.maxDistanceValueLabel.setVisible(False)
 
-      self.numRotationsDescriptionLabel.setVisible(False)
-      self.numRotationsValueLabel.setVisible(False)
+      self.trajectorySlopeDescriptionLabel.setVisible(False)
+      self.trajectorySlopeValueLabel.setVisible(False)
 
       self.procedureTimeDescriptionLabel.setVisible(False)
       self.procedureTimeValueLabel.setVisible(False)
@@ -199,8 +200,9 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     self.maxDistanceValueLabel.setText(str(metrics['maxDistance']))
     self.maxDistanceValueLabel.setVisible(True)
 
-    self.numRotationsDescriptionLabel.setVisible(True)
-    self.numRotationsValueLabel.setVisible(True)
+    self.trajectorySlopeDescriptionLabel.setVisible(True)
+    self.trajectorySlopeValueLabel.setText(str(metrics['trajectorySlope']))
+    self.trajectorySlopeValueLabel.setVisible(True)
 
     self.procedureTimeValueLabel.setText(timeTaken)
     self.procedureTimeDescriptionLabel.setVisible(True)
@@ -243,8 +245,12 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       'maxDistance': 0,
       'minAngle': 180,
       'maxAngle': 0,
-      'numRotations': 0
+      'trajectorySlope': 0
     }
+    self.pathFiducialsX = []
+    self.pathFiducialsY = []
+    self.path = []
+    self.lastTimestamp = time.time()
 
 
   def resetMetrics(self):
@@ -255,12 +261,21 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       'maxAngle': 0,
       'numRotations': 0
     }
+    self.pathFiducialsX = []
+    self.pathFiducialsY = []
+    self.path = []
+    self.lastTimestamp = time.time()
 
 
   def loadTransforms(self):
     moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
 
-    self.vesselToRetractor = slicer.util.getNode('VesselToRetractor')
+    vesselToRetractor = slicer.util.getNode('VesselToRetractor')
+    if vesselToRetractor == None:
+      vesselToRetractor = slicer.vtkMRMLLinearTransformNode()
+      vesselToRetractor.SetName('vesselToRetractor')
+      slicer.mrmlScene.AddNode(vesselToRetractor)
+
     triggerToCutter = slicer.util.getNode('TriggerToCutter')
     if triggerToCutter == None:
       triggerToCutter = slicer.vtkMRMLLinearTransformNode()
@@ -345,8 +360,9 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
         logging.error('Could not read needle tip to needle transform!')
       else:
         self.vesselModelToVessel.SetName("VesselModelToVessel")
+    vesselToRetractor = slicer.util.getNode('vesselToRetractor')
     self.vesselModel.SetAndObserveTransformNodeID(self.vesselModelToVessel.GetID())
-    self.vesselModelToVessel.SetAndObserveTransformNodeID(self.vesselToRetractor.GetID())
+    self.vesselModelToVessel.SetAndObserveTransformNodeID(vesselToRetractor.GetID())
 
 
   def run(self):
@@ -407,6 +423,18 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     cutterMovingToTip = slicer.mrmlScene.GetFirstNodeByName('CutterMovingToCutterTip')
     cutterMovingToTip.SetAndObserveTransformToParent(cutterMovingToTipTransform)   
 
+    # current timestamp is time.time()
+    # save fiducial point every 2 seconds 
+    if ( time.time() - self.lastTimestamp) > 2: 
+      cutterTipWorld = [0,0,0,0]
+      fiducial = slicer.util.getNode("F")
+      fiducial.GetNthFiducialWorldCoordinates(0,cutterTipWorld) # z coordinate not important for linear slope calculation
+      #print cutterTipWorld
+      self.pathFiducialsX.append(cutterTipWorld[0])
+      self.pathFiducialsY.append(cutterTipWorld[1])
+      self.path.append(cutterTipWorld[:-1])
+      self.lastTimestamp = time.time()
+
     self.updateAngleMetrics()
 
     if math.fabs(openAngle) < 0.5:
@@ -452,6 +480,14 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     
   
   def getDistanceMetrics(self):
+    if len(self.pathFiducialsX) > 0:
+      print self.pathFiducialsX, self.pathFiducialsY
+      x = numpy.array(self.pathFiducialsX)
+      y = numpy.array(self.pathFiducialsY)
+      A = numpy.vstack([x, numpy.ones(len(x))]).T
+      slope, _ = numpy.linalg.lstsq(A, y)[0]
+      self.metrics['trajectorySlope'] = round(slope, 2)
+      self.metrics['points'] = self.path
     return self.metrics
 
   
