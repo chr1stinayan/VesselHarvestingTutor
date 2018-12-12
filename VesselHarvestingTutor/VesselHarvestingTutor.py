@@ -138,14 +138,15 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
 
   def onRunTutorButton(self):
     if not self.runTutor: # if tutor is not running, start it 
+      logic.runTutor = True
       self.onStartTutorButton()
     else: # stop active tutor 
+      logic.runTutor = False
       self.onStopTutorButton()
 
 
   def onStartTutorButton(self):
       logic.resetMetrics()
-      print logic.getDistanceMetrics()
       self.runTutorButton.setText("Stop Recording")
       self.runTutorButton.toolTip = "Stops EVH tutor and recording practice procedure."
       self.runTutor = not self.runTutor
@@ -169,14 +170,17 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
       self.procedureTimeValueLabel.setVisible(False)
 
       self.showPathButton.setVisible(False)
+      self.saveButton.setVisible(False)
 
       self.startTime = time.time()
-      logic.runTutor()
+      logic.runTutor = True
   
 
   def onStopTutorButton(self):    
     self.runTutorButton.setText("Start Recording")
     self.runTutor = not self.runTutor
+    
+    logic.runTutor = False
     
     # Calculate total procedure time 
     stopTime = time.time() 
@@ -215,7 +219,11 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
   def onShowPathButton(self):
     print 'Reconstructing retractor trajectory ...'
     # TODO implement path reconstruction
-    pass
+    fidNode = slicer.util.getNode('MarkupsFiducial_*')
+    n = fidNode.GetNumberOfFiducials()
+    for i in range(0, n):
+      fidNode.SetNthFiducialVisibility(i, 1)  
+    print 'Reconstruction complete'
 
   
   def onSaveButton(self):
@@ -240,6 +248,10 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
 
   
   def __init__(self):
+    self.resetMetrics()
+
+
+  def resetMetrics(self):
     self.metrics = {
       'minDistance': 9999999999999999999999999999,
       'maxDistance': 0,
@@ -251,20 +263,8 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     self.pathFiducialsY = []
     self.path = []
     self.lastTimestamp = time.time()
-
-
-  def resetMetrics(self):
-    self.metrics = {
-      'minDistance': 9999999999999999999999999999,
-      'maxDistance': 0,
-      'minAngle': 180,
-      'maxAngle': 0,
-      'numRotations': 0
-    }
-    self.pathFiducialsX = []
-    self.pathFiducialsY = []
-    self.path = []
-    self.lastTimestamp = time.time()
+    self.runTutor = False
+    self.fidNumber = 0
 
 
   def loadTransforms(self):
@@ -362,7 +362,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
         self.vesselModelToVessel.SetName("VesselModelToVessel")
     vesselToRetractor = slicer.util.getNode('vesselToRetractor')
     self.vesselModel.SetAndObserveTransformNodeID(self.vesselModelToVessel.GetID())
-    self.vesselModelToVessel.SetAndObserveTransformNodeID(vesselToRetractor.GetID())
+    #self.vesselModelToVessel.SetAndObserveTransformNodeID(vesselToRetractor.GetID())
 
 
   def run(self):
@@ -424,12 +424,27 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     cutterMovingToTip.SetAndObserveTransformToParent(cutterMovingToTipTransform)   
 
     # current timestamp is time.time()
-    # save fiducial point every 2 seconds 
-    if ( time.time() - self.lastTimestamp) > 2: 
+    # save fiducial point every 0.5 seconds 
+    #print self.runTutor
+    if self.runTutor and ( time.time() - self.lastTimestamp) > 0.25: 
       cutterTipWorld = [0,0,0,0]
       fiducial = slicer.util.getNode("F")
       fiducial.GetNthFiducialWorldCoordinates(0,cutterTipWorld) # z coordinate not important for linear slope calculation
-      #print cutterTipWorld
+      ras = [0,0,0]
+      fiducial.GetNthFiducialPosition(0,ras)
+
+      # add path fiducials to separate node
+      self.pathFiducialsNode = slicer.util.getNode('MarkupsFiducial_*')
+      if self.pathFiducialsNode == None:
+        self.pathFiducialsNode = slicer.mrmlScene.CreateNodeByClass('vtkMRMLMarkupsFiducialNode')
+        slicer.mrmlScene.AddNode(self.pathFiducialsNode)
+
+      slicer.modules.markups.logic().AddFiducial(cutterTipWorld[0], cutterTipWorld[1], cutterTipWorld[2])
+      # set new fiducial's label and hide from 3D view
+      n = self.pathFiducialsNode.GetNumberOfFiducials() - 1
+      self.pathFiducialsNode.SetNthFiducialLabel(n, str(n))
+      self.pathFiducialsNode.SetNthFiducialVisibility(n, 0)  
+
       self.pathFiducialsX.append(cutterTipWorld[0])
       self.pathFiducialsY.append(cutterTipWorld[1])
       self.path.append(cutterTipWorld[:-1])
