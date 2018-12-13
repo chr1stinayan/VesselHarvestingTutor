@@ -323,7 +323,6 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
 
     #load vessel
-
     for i in range(13):
       modelFilename = 'Model_' + str(i) + '.vtk'
       fiducialFilename = 'Points_' + str(i) + '.fcsv'
@@ -332,7 +331,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, tempNode] = slicer.util.loadModel(modelFilePath, returnNode=True)
       tempNode.GetDisplayNode().SetColor(1, 0, 0)
       slicer.util.loadMarkupsFiducialList(fiducialFilePath)
-      if i == 0: 
+      if i == 0:
         self.vesselModel = tempNode
     
     self.retractorModel= slicer.util.getNode('RetractorModel')
@@ -376,13 +375,14 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
         logging.error('Could not read needle tip to needle transform!')
       else:
         self.vesselModelToVessel.SetName("VesselModelToVessel")
-    vesselToRetractor = slicer.util.getNode('vesselToRetractor')
+    vesselToRetractor = slicer.util.getNode('VesselToRetractor')
 
     vesselID = self.vesselModelToVessel.GetID()
     for i in range(13): 
       branchName = 'Model_' + str(i)
       branchNode = slicer.util.getNode(branchName)
       branchNode.SetAndObserveTransformNodeID(vesselID)
+    print vesselToRetractor
     self.vesselModelToVessel.SetAndObserveTransformNodeID(vesselToRetractor.GetID())
 
 
@@ -499,7 +499,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     cutterTipWorld = [0,0,0,0]
     fiducial = slicer.util.getNode("F")
     fiducial.GetNthFiducialWorldCoordinates(0,cutterTipWorld) # cutterTipWorld now holds the coordinates of 
-    self.vesselModel = slicer.util.getNode('VesselModel') 
+    self.vesselModel = slicer.util.getNode('Model_0') 
     polydata = self.vesselModel.GetPolyData()
     numVesselPoints = polydata.GetNumberOfPoints()
     vesselPoints = [ self.distance(cutterTipWorld, polydata.GetPoint(i)) for i in range(numVesselPoints)]
