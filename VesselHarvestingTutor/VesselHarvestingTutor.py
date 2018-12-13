@@ -46,6 +46,13 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     self.runTutor = False
     self.cutterFiducial = slicer.modules.markups.logic().AddFiducial()
 
+    # Add tissue surrounding vein
+    models = slicer.modules.createmodels.logic()
+    tissue = models.CreateCube(1000, 1000, 1000)
+    tissue.GetDisplayNode().SetColor(0.85, 0.75, 0.6)
+    tissue.GetDisplayNode().SetOpacity(0.7)
+
+
     # Instantiate and connect widgets ...
 
     #
@@ -262,6 +269,8 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     self.path = []
     self.lastTimestamp = time.time()
     self.runTutor = False
+
+    self.fidNodes = {} # node number is key, value is list of fiducial points in node
     
     # remove existing fiducials
     fidNode = slicer.util.getNode('MarkupsFiducial_*')
@@ -312,6 +321,19 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
 
   def loadModels(self):
     moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
+
+    #load vessel
+
+    for i in range(13):
+      modelFilename = 'Model_' + str(i) + '.vtk'
+      fiducialFilename = 'Points_' + str(i) + '.fcsv'
+      modelFilePath = os.path.join(moduleDir, os.pardir,'CadModels/vessel', modelFilename)
+      fiducialFilePath = os.path.join(moduleDir, os.pardir,'CadModels/vessel', fiducialFilename)
+      [success, tempNode] = slicer.util.loadModel(modelFilePath, returnNode=True)
+      tempNode.GetDisplayNode().SetColor(1, 0, 0)
+      slicer.util.loadMarkupsFiducialList(fiducialFilePath)
+      if i == 0: 
+        self.vesselModel = tempNode
     
     self.retractorModel= slicer.util.getNode('RetractorModel')
     if not self.retractorModel:
@@ -326,13 +348,6 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, self.cutterBaseModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
       self.cutterBaseModel.SetName('CutterBaseModel')
       self.cutterBaseModel.GetDisplayNode().SetColor(0.8, 0.9, 1.0)
-	  
-    self.vesselModel= slicer.util.getNode('VesselModel')
-    if not self.vesselModel:
-      modelFilePath = os.path.join(moduleDir, os.pardir,'CadModels', 'VesselModel.vtk')
-      [success, self.vesselModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
-      self.vesselModel.SetName('VesselModel')
-      self.vesselModel.GetDisplayNode().SetColor(1, 0, 0)
 
     cutterTipToCutter = slicer.util.getNode('CutterTipToCutter')
     if cutterTipToCutter == None:
@@ -362,8 +377,13 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       else:
         self.vesselModelToVessel.SetName("VesselModelToVessel")
     vesselToRetractor = slicer.util.getNode('vesselToRetractor')
-    self.vesselModel.SetAndObserveTransformNodeID(self.vesselModelToVessel.GetID())
-    #self.vesselModelToVessel.SetAndObserveTransformNodeID(vesselToRetractor.GetID())
+
+    vesselID = self.vesselModelToVessel.GetID()
+    for i in range(13): 
+      branchName = 'Model_' + str(i)
+      branchNode = slicer.util.getNode(branchName)
+      branchNode.SetAndObserveTransformNodeID(vesselID)
+    self.vesselModelToVessel.SetAndObserveTransformNodeID(vesselToRetractor.GetID())
 
 
   def run(self):
