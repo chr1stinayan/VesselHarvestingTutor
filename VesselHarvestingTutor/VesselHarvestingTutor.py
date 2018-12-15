@@ -7,6 +7,10 @@ import time, datetime
 import math, numpy
 import csv
 
+NUM_BRANCHES = 10
+NUM_MODELS = 11
+ENDRANGE = 12
+
 #
 # VesselHarvestingTutor
 #
@@ -47,11 +51,12 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     self.cutterFiducial = slicer.modules.markups.logic().AddFiducial()
 
     # Add tissue surrounding vein
-    models = slicer.modules.createmodels.logic()
-    tissue = models.CreateCube(1000, 1000, 1000)
-    tissue.GetDisplayNode().SetColor(0.85, 0.75, 0.6)
-    tissue.GetDisplayNode().SetOpacity(0.7)
-
+    self.tissueModel = slicer.util.getNode('CubeModel')
+    if not self.tissueModel:
+      models = slicer.modules.createmodels.logic()
+      tissue = models.CreateCube(1000, 1000, 1000)
+      tissue.GetDisplayNode().SetColor(0.85, 0.75, 0.6)
+      tissue.GetDisplayNode().SetOpacity(0.5)
 
     # Instantiate and connect widgets ...
 
@@ -154,6 +159,7 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
 
   def onStartTutorButton(self):
       logic.resetMetrics()
+      logic.resetModels()
       self.runTutorButton.setText("Stop Recording")
       self.runTutorButton.toolTip = "Stops EVH tutor and recording practice procedure."
       self.runTutor = not self.runTutor
@@ -254,11 +260,18 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
   
   def __init__(self):
     self.resetMetrics()
+    self.branchStarts = []
 
+
+  def resetModels(self):
+    for i in range(1, NUM_MODELS):
+      branchNode = slicer.util.getNode('Model_' + str(i))
+      branchNode.GetDisplayNode().SetVisibility(True)
+    
 
   def resetMetrics(self):
     self.metrics = {
-      'minDistance': 9999999999999999999999999999,
+      'minDistance': float("inf"),
       'maxDistance': 0,
       'minAngle': 180,
       'maxAngle': 0,
@@ -268,10 +281,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     self.pathFiducialsY = []
     self.path = []
     self.lastTimestamp = time.time()
-    self.runTutor = False
-
-    self.fidNodes = {} # node number is key, value is list of fiducial points in node
-    
+    self.runTutor = False    
     # remove existing fiducials
     fidNode = slicer.util.getNode('MarkupsFiducial_*')
     slicer.mrmlScene.RemoveNode(fidNode)
@@ -310,11 +320,18 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, cutterTipToCutter] = slicer.util.loadTransform(filePath, returnNode=True)
       cutterTipToCutter.SetName('CutterTipToCutter')
 
+    vesselToWorld = slicer.util.getNode('VesselToWorld')
+    if vesselToWorld == None:
+      filePath = os.path.join(moduleDir, os.pardir, 'Transforms', 'VesselToWorld.h5')
+      [success, vesselToWorld] = slicer.util.loadTransform(filePath, returnNode=True)
+      vesselToWorld.SetName('VesselToWorld')
+
     # Create and set fiducial point on the cutter tip, used to calculate distance metrics
     # TODO make fiducial invisible
     fidNode = slicer.util.getNode("F")
     fidNode.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
     cutterTipToCutter.SetAndObserveTransformNodeID(cutterToRetractor.GetID())
+    triggerToCutter.SetAndObserveTransformNodeID(cutterToRetractor.GetID())
     cutterMovingToTip.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
     triggerToCutter.AddObserver(slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.updateTransforms)
 
@@ -323,17 +340,26 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
 
     #load vessel
-    for i in range(13):
-      modelFilename = 'Model_' + str(i) + '.vtk'
-      fiducialFilename = 'Points_' + str(i) + '.fcsv'
-      modelFilePath = os.path.join(moduleDir, os.pardir,'CadModels/vessel', modelFilename)
-      fiducialFilePath = os.path.join(moduleDir, os.pardir,'CadModels/vessel', fiducialFilename)
-      [success, tempNode] = slicer.util.loadModel(modelFilePath, returnNode=True)
-      tempNode.GetDisplayNode().SetColor(1, 0, 0)
-      slicer.util.loadMarkupsFiducialList(fiducialFilePath)
-      if i == 0:
-        self.vesselModel = tempNode
-    
+    self.vesselModel = slicer.util.getNode('Model_0')
+    if not self.vesselModel:      
+      for i in range(NUM_MODELS):
+        modelFilename = 'Model_' + str(i) + '.vtk'     
+        modelFilePath = os.path.join(moduleDir, os.pardir,'CadModels/vessel', modelFilename)
+        [success, tempNode] = slicer.util.loadModel(modelFilePath, returnNode=True)
+        tempNode.GetDisplayNode().SetColor(1, 0, 0)
+        fiducialFilename = 'Points_' + str(i) + '.fcsv'
+        fiducialFilePath = os.path.join(moduleDir, os.pardir,'CadModels/vessel', fiducialFilename)
+        slicer.util.loadMarkupsFiducialList(fiducialFilePath)
+        if i == 0:
+          self.vesselModel = tempNode
+
+    # initialize array with first point of each branch
+    for i in range(1, NUM_MODELS):
+      temp = slicer.util.getNode('Points_' + str(i))
+      world = [0,0,0,0]
+      temp.GetNthFiducialWorldCoordinates(0, world) 
+      self.branchStarts.append(world)
+
     self.retractorModel= slicer.util.getNode('RetractorModel')
     if not self.retractorModel:
       modelFilePath = os.path.join(moduleDir, os.pardir,'CadModels', 'VesselRetractorHead.stl')
@@ -378,12 +404,52 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     vesselToRetractor = slicer.util.getNode('VesselToRetractor')
 
     vesselID = self.vesselModelToVessel.GetID()
-    for i in range(13): 
-      branchName = 'Model_' + str(i)
+    for i in range(NUM_MODELS): 
+      branchName = 'Points_' + str(i)
+      modelName = 'Model_' + str(i)
       branchNode = slicer.util.getNode(branchName)
+      modelNode = slicer.util.getNode(modelName)
       branchNode.SetAndObserveTransformNodeID(vesselID)
-    print vesselToRetractor
-    self.vesselModelToVessel.SetAndObserveTransformNodeID(vesselToRetractor.GetID())
+      modelNode.SetAndObserveTransformNodeID(vesselID)
+    vesselToWorld = slicer.util.getNode('VesselToWorld')
+    self.vesselModelToVessel.SetAndObserveTransformNodeID(vesselToWorld.GetID())
+
+    '''
+    fidList = slicer.util.getNode('Points_12')
+    numPoints = fidList.GetNumberOfFiducials()
+
+    points = vtk.vtkPoints()
+    # points_coords = []
+    for i in range(numPoints):
+      fid_ras_coord = [0, 0, 0]
+      fidList.GetNthFiducialPosition(i, fid_ras_coord)
+      points.InsertNextPoint(fid_ras_coord)
+    #   points_coords.append(fid_ras_coord)
+
+    lineCellArray = vtk.vtkCellArray()
+    lineCellArray.InsertNextCell(numPoints)
+    for i in range(numPoints):
+      lineCellArray.InsertCellPoint(i)
+    linePolyData = vtk.vtkPolyData()
+    linePolyData.SetPoints(points)
+    linePolyData.SetLines(lineCellArray)
+
+    model = slicer.vtkMRMLModelNode()
+    model.SetAndObservePolyData(linePolyData)
+
+    modelDisplay = slicer.vtkMRMLModelDisplayNode()
+    modelDisplay.SetColor(1, 0, 0)
+    modelDisplay.SetEdgeColor(0,0,0)
+    modelDisplay.SetPointSize(9000000)
+    modelDisplay.SetLineWidth(900000000000)
+
+
+    modelDisplay.SetVisibility(True)
+    slicer.mrmlScene.AddNode(modelDisplay)
+    model.SetAndObserveDisplayNodeID(modelDisplay.GetID())
+    modelDisplay.SetInputPolyDataConnection(model.GetPolyDataConnection())
+    slicer.mrmlScene.AddNode(model)
+    '''
 
 
   def run(self):
@@ -470,8 +536,35 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     self.updateAngleMetrics()
 
     if math.fabs(openAngle) < 0.5:
-      return self.updateDistanceMetrics()
+      self.checkModel()
+      self.updateDistanceMetrics()
 
+  def checkModel(self): # check if vessel branch needs to be hidden 
+    minDistance = float("inf")
+    index = 0
+    print 'entered check model'
+    a = self.branchStarts
+    for point in a:
+      cutterTipWorld = [0,0,0,0]
+      fiducial = slicer.util.getNode("F")
+      fiducial.GetNthFiducialWorldCoordinates(0,cutterTipWorld) # cutterTipWorld now holds the coordinates of 
+      distanceToBranch =  self.distance(cutterTipWorld, point) # double check dimensions 
+      if distanceToBranch < minDistance:
+        minDistance = distanceToBranch
+        index = self.branchStarts.index(point) 
+
+    
+    branchNode = slicer.util.getNode('Model_' + str(index))
+    print branchNode == None, index
+    polydata = branchNode.GetPolyData()    
+    numVesselPoints = polydata.GetNumberOfPoints()
+    vesselPoints = [ self.distance(self.branchStarts[index], polydata.GetPoint(i)) for i in range(numVesselPoints)]
+    cutDistance = min(vesselPoints)
+
+    if cutDistance < 2500:
+      branchDisplayNode = branchNode.GetDisplayNode()
+      branchDisplayNode.SetVisibility(False)
+     
 
   def npArrayFromVtkMatrix(self, vtkMatrix):
     npArray = numpy.zeros((4,4))
