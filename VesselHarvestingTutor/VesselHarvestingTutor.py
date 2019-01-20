@@ -275,7 +275,8 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
   def resetModels(self):
     for i in range(0, NUM_MODELS):
       branchNode = slicer.util.getNode('Model_' + str(i))
-      branchNode.GetDisplayNode().SetVisibility(True)
+      if branchNode:
+        branchNode.GetDisplayNode().SetVisibility(True)
     
 
   def resetMetrics(self):
@@ -302,8 +303,15 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     vesselToRetractor = slicer.util.getNode('VesselToRetractor')
     if vesselToRetractor == None:
       vesselToRetractor = slicer.vtkMRMLLinearTransformNode()
-      vesselToRetractor.SetName('vesselToRetractor')
+      vesselToRetractor.SetName('VesselToRetractor')
       slicer.mrmlScene.AddNode(vesselToRetractor)
+
+    vesselModelToVessel = slicer.util.getNode('VesselModelToVessel')
+    if vesselModelToVessel == None: 
+      vesselModelToVessel = slicer.vtkMRMLLinearTransformNode()
+      vesselModelToVessel.SetName('VesselModelToVessel')
+      slicer.mrmlScene.AddNode(vesselModelToVessel)
+    vesselModelToVessel.SetAndObserveTransformNodeID(vesselToRetractor.GetID())
 
     triggerToCutter = slicer.util.getNode('TriggerToCutter')
     if triggerToCutter == None:
@@ -329,11 +337,15 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, cutterTipToCutter] = slicer.util.loadTransform(filePath, returnNode=True)
       cutterTipToCutter.SetName('CutterTipToCutter')
 
-    vesselToWorld = slicer.util.getNode('VesselToWorld')
-    if vesselToWorld == None:
-      filePath = os.path.join(moduleDir, os.pardir, 'Transforms', 'VesselToWorld.h5')
-      [success, vesselToWorld] = slicer.util.loadTransform(filePath, returnNode=True)
-      vesselToWorld.SetName('VesselToWorld')
+    cameraToRetractor = slicer.util.getNode('CameraToRetractor')
+    if cameraToRetractor == None:
+      filePath = os.path.join(moduleDir, os.pardir, 'Transforms', 'CameraToRetractor.h5')
+      [success, cameraToRetractor] = slicer.util.loadTransform(filePath, returnNode=True)
+      cameraToRetractor.SetName('CameraToRetractor')
+
+    defaultSceneCamera = slicer.util.getNode('vtkMRMLCameraNode1')
+    cameraToRetractorMatrix = cameraToRetractor.GetMatrixTransformToParent()
+    defaultSceneCamera.SetAppliedTransform(cameraToRetractorMatrix)
 
     # Create and set fiducial point on the cutter tip, used to calculate distance metrics
     fidNode = slicer.util.getNode("F")
@@ -434,8 +446,10 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       branchNode = slicer.util.getNode(branchName)
       branchNode.SetAndObserveTransformNodeID(vesselID)
 
-    vesselToWorld = slicer.util.getNode('VesselToWorld')
-    self.vesselModelToVessel.SetAndObserveTransformNodeID(vesselToWorld.GetID())
+      modelName = 'Model_' + str(i)
+      modelNode = slicer.util.getNode(modelName)
+      modelNode.SetAndObserveTransformNodeID(vesselID)
+
 
   def run(self):
     return True
@@ -588,15 +602,14 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     vesselPoints = [ self.distance(cutterTipWorld, polydata.GetPoint(i)) for i in range(numVesselPoints)]
     cutDistance = min(vesselPoints)
     if self.metrics['maxDistance'] < cutDistance:
-      self.metrics['maxDistance'] = round(cutDistance, 2)
+      self.metrics['maxDistance'] = str(round(cutDistance, 2)) + " mm"
     if self.metrics['minDistance'] > cutDistance:
-      self.metrics['minDistance'] = round(cutDistance, 2)
+      self.metrics['minDistance'] = str(round(cutDistance, 2)) + " mm"
     # TODO average cut distance logic 
     
   
   def getDistanceMetrics(self):
     if len(self.pathFiducialsX) > 0:
-      print self.pathFiducialsX, self.pathFiducialsY
       x = numpy.array(self.pathFiducialsX)
       y = numpy.array(self.pathFiducialsY)
       A = numpy.vstack([x, numpy.ones(len(x))]).T

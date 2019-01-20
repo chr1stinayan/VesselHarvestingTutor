@@ -48,6 +48,7 @@
 	    <Transform Name="TriggerToCutter" />
 		<Transform Name="CutterToRetractor" />
 		<Transform Name="VesselToRetractor" />
+		<Transform Name="RetractorToVessel" />
       </TransformNames>
     </DefaultClientInfo>
   </PlusOpenIGTLinkServer>
