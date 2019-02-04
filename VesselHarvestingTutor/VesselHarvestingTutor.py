@@ -139,15 +139,33 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     self.saveButton.connect('clicked(bool)', self.onSaveButton)
     evhTutorFormLayout.addRow(self.saveButton)
 
+    # Button to reset EVH Tutor
+    self.resetButton= qt.QPushButton("Reset EVH Tutor")
+    self.resetButton.toolTip = "Reset vessel models and metrics."
+    self.resetButton.enabled = True
+    self.resetButton.connect('clicked(bool)', self.onResetTutorButton)
+    evhTutorFormLayout.addRow(self.resetButton)
+
     # Add vertical spacing in EVH Tutor accordion 
     self.layout.addStretch(35)
 
     global logic 
     logic = VesselHarvestingTutorLogic()
+    logic.runTutor = False
     logic.loadTransforms()
     logic.loadModels()
     logic.resetModels()
 
+
+  def onResetTutorButton(self):
+      logic.resetMetrics()
+      logic.resetModels()
+      
+      # delete the path 
+      pathModel = slicer.util.getNode('Path Trajectory')
+
+      if pathModel: 
+        slicer.mrmlScene.RemoveNode(pathModel)
 
   def onRunTutorButton(self):
     if not self.runTutor: # if tutor is not running, start it 
@@ -159,8 +177,7 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
 
 
   def onStartTutorButton(self):
-      logic.resetMetrics()
-      logic.resetModels()
+      self.onResetTutorButton()
       self.runTutorButton.setText("Stop Recording")
       self.runTutorButton.toolTip = "Stops EVH tutor and recording practice procedure."
       self.runTutor = not self.runTutor
@@ -187,7 +204,6 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
       self.saveButton.setVisible(False)
 
       self.startTime = time.time()
-      logic.runTutor = True
   
 
   def onStopTutorButton(self):    
@@ -232,7 +248,11 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
   def onShowPathButton(self):
     print 'Reconstructing retractor trajectory ...'
     fidNode = slicer.util.getNode('MarkupsFiducial_*')
+    if fidNode == None:
+      slicer.util.CreateNodeByClass('vtkMRMLMarkupsFiducialNode')
+      fidNode = slicer.util.getNode('MarkupsFiducial_*')
     outputModel = slicer.mrmlScene.AddNode(slicer.vtkMRMLModelNode())
+    outputModel.SetName('Path Trajectory')
     outputModel.CreateDefaultDisplayNodes()
     outputModel.GetDisplayNode().SetSliceIntersectionVisibility(True)
     outputModel.GetDisplayNode().SetColor(1,1,0)
@@ -511,7 +531,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
 
     # current timestamp is time.time()
     # save fiducial point every 0.25 seconds 
-    if self.runTutor and ( time.time() - self.lastTimestamp) > 0.25: 
+    if ( time.time() - self.lastTimestamp) > 0.25: 
       cutterTipWorld = [0,0,0,0]
       fiducial = slicer.util.getNode("F")
       fiducial.GetNthFiducialWorldCoordinates(0,cutterTipWorld) # z coordinate not important for linear slope calculation
@@ -532,11 +552,10 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       self.path.append(cutterTipWorld[:-1])
       self.lastTimestamp = time.time()
 
-    self.updateAngleMetrics()
-
-    if math.fabs(openAngle) < 0.5:
-      self.checkModel()
-      self.updateDistanceMetrics()
+      self.updateAngleMetrics()
+      if self.runTutor and math.fabs(openAngle) < 0.25:
+        self.checkModel()
+        self.updateDistanceMetrics()
 
 
   def checkModel(self): # check if vessel branch needs to be snipped
@@ -563,11 +582,11 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       branchDisplayNode = branchNode.GetDisplayNode()
       branchDisplayNode.SetVisibility(False)
 
-      '''
-      TODO: implement the splitting of one branch into 2 by deleting the fiducial closest to the cutter, 
-      and split the remaining fiducials into 2 separate fid nodes so the models will be disjoint and show 
-      a 'cut' 
-      '''
+    '''
+    TODO: implement the splitting of one branch into 2 by deleting the fiducial closest to the cutter, 
+    and split the remaining fiducials into 2 separate fid nodes so the models will be disjoint and show 
+    a 'cut' 
+    '''
      
 
   def npArrayFromVtkMatrix(self, vtkMatrix):
