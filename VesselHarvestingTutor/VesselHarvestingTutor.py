@@ -163,9 +163,9 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
       
       # delete the path 
       pathModel = slicer.util.getNode('Path Trajectory')
-
       if pathModel: 
         slicer.mrmlScene.RemoveNode(pathModel)
+
 
   def onRunTutorButton(self):
     if not self.runTutor: # if tutor is not running, start it 
@@ -363,19 +363,28 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, cameraToRetractor] = slicer.util.loadTransform(filePath, returnNode=True)
       cameraToRetractor.SetName('CameraToRetractor')
 
+    stylusTipToStylus = slicer.util.getNode('StylusTipToStylus')
+    if stylusTipToStylus == None:
+      filePath = os.path.join(moduleDir, os.pardir, 'Transforms', 'StylusTipToStylus.h5')
+      [success, stylusTipToStylus] = slicer.util.loadTransform(filePath, returnNode=True)
+      stylusTipToStylus.SetName('StylusTipToStylus')
+
+    # TODO debug this 
     defaultSceneCamera = slicer.util.getNode('vtkMRMLCameraNode1')
     cameraToRetractorMatrix = cameraToRetractor.GetMatrixTransformToParent()
     defaultSceneCamera.SetAppliedTransform(cameraToRetractorMatrix)
 
+    cutterToRetractorID = cutterToRetractor.GetID()
     # Create and set fiducial point on the cutter tip, used to calculate distance metrics
     fidNode = slicer.util.getNode("F")
     fidNode.SetNthFiducialVisibility(0, 0)    
     fidNode.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
-    cutterTipToCutter.SetAndObserveTransformNodeID(cutterToRetractor.GetID())
-    triggerToCutter.SetAndObserveTransformNodeID(cutterToRetractor.GetID())
+
+    cutterTipToCutter.SetAndObserveTransformNodeID(cutterToRetractorID)
+    triggerToCutter.SetAndObserveTransformNodeID(cutterToRetractorID)
     cutterMovingToTip.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
     triggerToCutter.AddObserver(slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.updateTransforms)
-
+    stylusTipToStylus.SetAndObserveTransformNodeID(cutterToRetractorID)
 
   def loadModels(self):
     moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
@@ -423,6 +432,11 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, self.retractorModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
       self.retractorModel.SetName('RetractorModel')
       self.retractorModel.GetDisplayNode().SetColor(0.9, 0.9, 0.9)
+    # set model under stylusTipToStylus transform 
+    stylusTipToStylus = slicer.util.getNode('StylusTipToStylus')
+    if stylusTipToStylus:      
+      stylusID = stylusTipToStylus.GetID()
+      self.retractorModel.SetAndObserveTransformNodeID(stylusID)
     
     self.cutterBaseModel = slicer.util.getNode('CutterBaseModel')
     if self.cutterBaseModel == None:
