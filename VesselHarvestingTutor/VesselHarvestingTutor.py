@@ -370,9 +370,9 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       stylusTipToStylus.SetName('StylusTipToStylus')
 
     # TODO debug this 
-    defaultSceneCamera = slicer.util.getNode('vtkMRMLCameraNode1')
-    cameraToRetractorMatrix = cameraToRetractor.GetMatrixTransformToParent()
-    defaultSceneCamera.SetAppliedTransform(cameraToRetractorMatrix)
+    defaultSceneCamera = slicer.util.getNode('Default Scene Camera')
+    cameraToRetractorID = cameraToRetractor.GetID()
+    defaultSceneCamera.SetAndObserveTransformNodeID(cameraToRetractorID)
 
     cutterToRetractorID = cutterToRetractor.GetID()
     # Create and set fiducial point on the cutter tip, used to calculate distance metrics
