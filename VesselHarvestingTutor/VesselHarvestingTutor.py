@@ -343,7 +343,6 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     if cameraToRetractor == None:
       filePath = os.path.join(moduleDir, os.pardir, 'Transforms', 'CameraToRetractor.h5')
       [success, cameraToRetractor] = slicer.util.loadTransform(filePath, returnNode=True)
-      print success
       cameraToRetractor.SetName('CameraToRetractor')
 
     stylusTipToStylus = slicer.util.getNode('StylusTipToStylus')
@@ -486,7 +485,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     triggerAngle_Rad = vtk.vtkMath().AngleBetweenVectors(triggerDirection_Cutter, shaftDirection_Cutter)
     triggerAngle_Deg = vtk.vtkMath().DegreesFromRadians(triggerAngle_Rad)
     
-    print "triggerAngle_Deg: " + str(triggerAngle_Deg)
+    #print "triggerAngle_Deg: " + str(triggerAngle_Deg)
     
     if triggerAngle_Deg < 86.0:
       triggerAngle_Deg = 86.0
