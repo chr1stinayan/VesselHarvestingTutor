@@ -3,6 +3,13 @@ import unittest
 import vtk, qt, ctk, slicer
 from slicer.ScriptedLoadableModule import *
 import logging
+import time, datetime
+import math, numpy
+import csv
+
+NUM_BRANCHES = 10
+NUM_MODELS = 11
+ENDRANGE = 12
 
 #
 # VesselHarvestingTutor
@@ -15,10 +22,10 @@ class VesselHarvestingTutor(ScriptedLoadableModule):
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "VesselHarvestingTutor" # TODO make this more human readable by adding spaces
+    self.parent.title = "Vessel Harvesting Tutor" 
     self.parent.categories = ["IGT"]
     self.parent.dependencies = []
-    self.parent.contributors = ["John Doe (AnyWare Corp.)"] # replace with "Firstname Lastname (Organization)"
+    self.parent.contributors = ["Perk Lab"] 
     self.parent.helpText = """
 This is an example of scripted loadable module bundled in an extension.
 It performs a simple thresholding on the input volume and optionally captures a screenshot.
@@ -42,15 +49,6 @@ class VesselHarvestingTutorWidget(ScriptedLoadableModuleWidget):
     ScriptedLoadableModuleWidget.setup(self)
     self.runTutor = False
     self.cutterFiducial = slicer.modules.markups.logic().AddFiducial()
-
-    # Add tissue surrounding vein
-    self.tissueModel = slicer.util.getNode('CubeModel')
-    if not self.tissueModel:
-      models = slicer.modules.createmodels.logic()
-      tissue = models.CreateCube(1000, 1000, 1000)
-      tissue.GetDisplayNode().SetColor(0.85, 0.75, 0.6)
-      tissue.GetDisplayNode().SetOpacity(0.5)
-
     # Instantiate and connect widgets ...
 
     #
@@ -286,6 +284,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     self.modelPolydata = {}
     self.SKELETON_MODEL_NAME = 'Skeleton Model'
 
+
   def resetModels(self):
     for i in range(0, NUM_MODELS):
       branchNode = slicer.util.getNode('Model_' + str(i))
@@ -313,8 +312,20 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
 
   def loadTransforms(self):
     moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
-  
-    self.vesselToRetractor = slicer.util.getNode('VesselToRetractor')
+
+    vesselToRetractor = slicer.util.getNode('VesselToRetractor')
+    if vesselToRetractor == None:
+      vesselToRetractor = slicer.vtkMRMLLinearTransformNode()
+      vesselToRetractor.SetName('VesselToRetractor')
+      slicer.mrmlScene.AddNode(vesselToRetractor)
+
+    vesselModelToVessel = slicer.util.getNode('VesselModelToVessel')
+    if vesselModelToVessel == None: 
+      vesselModelToVessel = slicer.vtkMRMLLinearTransformNode()
+      vesselModelToVessel.SetName('VesselModelToVessel')
+      slicer.mrmlScene.AddNode(vesselModelToVessel)
+    vesselModelToVessel.SetAndObserveTransformNodeID(vesselToRetractor.GetID())
+
     triggerToCutter = slicer.util.getNode('TriggerToCutter')
     if triggerToCutter == None:
       triggerToCutter = slicer.vtkMRMLLinearTransformNode()
@@ -351,7 +362,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, stylusTipToStylus] = slicer.util.loadTransform(filePath, returnNode=True)
       stylusTipToStylus.SetName('StylusTipToStylus')
 
-    # TODO debug this / add set position
+    # TODO debug this 
     defaultSceneCamera = slicer.util.getNode('Default Scene Camera')
     cameraToRetractorID = cameraToRetractor.GetID()
     defaultSceneCamera.SetAndObserveTransformNodeID(cameraToRetractorID)
@@ -366,15 +377,16 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     triggerToCutter.SetAndObserveTransformNodeID(cutterToRetractorID)
     cutterMovingToTip.SetAndObserveTransformNodeID(cutterTipToCutter.GetID())
     triggerToCutter.AddObserver(slicer.vtkMRMLLinearTransformNode.TransformModifiedEvent, self.updateTransforms)
-
+    stylusTipToStylus.SetAndObserveTransformNodeID(cutterToRetractorID)
 
   def loadModels(self):
-    #TODO: add model polydata to self.modelsPolydata
+    #TODO: add model polydata to self.modelsPOlydata
     moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
-    self.skeletonModelNode = slicer.util.getNode(self.SKELETON_MODEL_NAME)
-    if self.skeletonModelNode == None:
-      self.skeletonModelNode = slicer.mrmlScene.AddNode(slicer.vtkMRMLModelNode())
-      self.skeletonModelNode.SetName(self.SKELETON_MODEL_NAME)
+
+    skeletonModel = slicer.util.getNode(self.SKELETON_MODEL_NAME)
+    if skeletonModel == None: 
+      skeletonModel = slicer.mrmlScene.AddNode(slicer.vtkMRMLModelNode())
+      skeletonModel.SetName(self.SKELETON_MODEL_NAME)
 
     #load vessel
     self.vesselModel = slicer.util.getNode('Model_1')
@@ -384,27 +396,26 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
         fiducialFilePath = os.path.join(moduleDir, os.pardir,'CadModels/vessel', fiducialFilename)
         slicer.util.loadMarkupsFiducialList(fiducialFilePath)
         fiducialNode = slicer.util.getNode('Points_' + str(i))
+        if fiducialNode != None: 
+          # create models
+          outputModel = slicer.mrmlScene.AddNode(slicer.vtkMRMLModelNode())
+          outputModel.CreateDefaultDisplayNodes()
+          outputModel.SetName('Model_' + str(i))
+          outputModel.GetDisplayNode().SetSliceIntersectionVisibility(True)
+          outputModel.GetDisplayNode().SetColor(1,0,0)
 
-        # create models
-        outputModel = slicer.mrmlScene.AddNode(slicer.vtkMRMLModelNode())
-        outputModel.CreateDefaultDisplayNodes()
-        outputModel.SetName('Model_' + str(i))
-        outputModel.GetDisplayNode().SetSliceIntersectionVisibility(True)
-        outputModel.GetDisplayNode().SetColor(1,0,0)
-        self.modelPolydata['Model_' + str(i)] = outputModel.GetPolyData() 
+          markupsToModel = slicer.mrmlScene.AddNode(slicer.vtkMRMLMarkupsToModelNode())
+          markupsToModel.SetAutoUpdateOutput(True)
+          markupsToModel.SetAndObserveModelNodeID(outputModel.GetID())
+          markupsToModel.SetAndObserveMarkupsNodeID(fiducialNode.GetID())
+          markupsToModel.SetModelType(slicer.vtkMRMLMarkupsToModelNode.Curve)
+          markupsToModel.SetCurveType(slicer.vtkMRMLMarkupsToModelNode.CardinalSpline)
 
-        markupsToModel = slicer.mrmlScene.AddNode(slicer.vtkMRMLMarkupsToModelNode())
-        markupsToModel.SetAutoUpdateOutput(True)
-        markupsToModel.SetAndObserveModelNodeID(outputModel.GetID())
-        markupsToModel.SetAndObserveMarkupsNodeID(fiducialNode.GetID())
-        markupsToModel.SetModelType(slicer.vtkMRMLMarkupsToModelNode.Curve)
-        markupsToModel.SetCurveType(slicer.vtkMRMLMarkupsToModelNode.CardinalSpline)
-
-        if i == 0:
-          self.vesselModel = outputModel
-          markupsToModel.SetTubeRadius(5)
-        else:
-          markupsToModel.SetTubeRadius(2)
+          if i == 0:
+            self.vesselModel = outputModel
+            markupsToModel.SetTubeRadius(5)
+          else:
+            markupsToModel.SetTubeRadius(2)
 
 
     # initialize array with first point of each branch
@@ -420,6 +431,11 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, self.retractorModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
       self.retractorModel.SetName('RetractorModel')
       self.retractorModel.GetDisplayNode().SetColor(0.9, 0.9, 0.9)
+    # set model under stylusTipToStylus transform 
+    stylusTipToStylus = slicer.util.getNode('StylusTipToStylus')
+    if stylusTipToStylus:      
+      stylusID = stylusTipToStylus.GetID()
+      self.retractorModel.SetAndObserveTransformNodeID(stylusID)
     
     self.cutterBaseModel = slicer.util.getNode('CutterBaseModel')
     if self.cutterBaseModel == None:
@@ -427,13 +443,6 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       [success, self.cutterBaseModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
       self.cutterBaseModel.SetName('CutterBaseModel')
       self.cutterBaseModel.GetDisplayNode().SetColor(0.8, 0.9, 1.0)
-	  
-    self.vesselModel= slicer.util.getNode('VesselModel')
-    if not self.vesselModel:
-      modelFilePath = os.path.join(moduleDir, os.pardir,'CadModels', 'VesselModel.vtk')
-      [success, self.vesselModel] = slicer.util.loadModel(modelFilePath, returnNode=True)
-      self.vesselModel.SetName('VesselModel')
-      self.vesselModel.GetDisplayNode().SetColor(1, 0, 0)
 
     cutterTipToCutter = slicer.util.getNode('CutterTipToCutter')
     if cutterTipToCutter == None:
@@ -462,39 +471,62 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
         logging.error('Could not read needle tip to needle transform!')
       else:
         self.vesselModelToVessel.SetName("VesselModelToVessel")
-    self.vesselModel.SetAndObserveTransformNodeID(self.vesselModelToVessel.GetID())
+    vesselToRetractor = slicer.util.getNode('VesselToRetractor')
+
+    vesselID = self.vesselModelToVessel.GetID()
+    for i in range(NUM_MODELS): 
+      branchName = 'Points_' + str(i)
+      branchNode = slicer.util.getNode(branchName)
+      branchNode.SetAndObserveTransformNodeID(vesselID)
+
+      modelName = 'Model_' + str(i)
+      modelNode = slicer.util.getNode(modelName)
+      modelNode.SetAndObserveTransformNodeID(vesselID)
+
+
+  def distance(self, a, b):
+    dist = 0
+    length = len(b)
+    for i in range(length):
+      dist += (a[i] - b[i]) ** 2
+    return math.sqrt(dist)
+
+  
+  def calculateVesselToRetractorAngle(self, vesselVector, retractorVector):
+    angleRadians = vtk.vtkMath.AngleBetweenVectors(vesselVector[0:3], retractorVector[0:3])
+    angleDegrees = round(vtk.vtkMath.DegreesFromRadians(angleRadians), 2)
+    if self.metrics['maxAngle'] < angleDegrees:
+      self.metrics['maxAngle'] = angleDegrees
+    elif self.metrics['minAngle'] > angleDegrees:
+      self.metrics['minAngle'] = angleDegrees
   
   
   def updateTransforms(self, event, caller):
     
-    triggerToCutter = slicer.mrmlScene.GetFirstNodeByName('TriggerToCutter')
-    
+    triggerToCutter = slicer.mrmlScene.GetFirstNodeByName('TriggerToCutter')    
     if triggerToCutter == None:
       logging.error('Could not found TriggerToCutter!')
-      #return
-    
-    triggerToCutterTransform = triggerToCutter.GetTransformToParent()
-    
-    angles = triggerToCutterTransform.GetOrientation()
-    
-    
+
+    triggerToCutterTransform = triggerToCutter.GetTransformToParent()    
+    angles = triggerToCutterTransform.GetOrientation()    
+    # Todo: Implement cutter angle computation as outlined below    
     shaftDirection_Cutter = [0,1,0]
     triggerDirection_Trigger = [1,0,0]
-    triggerDirection_Cutter = triggerToCutterTransform.TransformFloatVector(triggerDirection_Trigger)
-    
+    triggerDirection_Cutter = triggerToCutterTransform.TransformFloatVector(triggerDirection_Trigger)    
+
     triggerAngle_Rad = vtk.vtkMath().AngleBetweenVectors(triggerDirection_Cutter, shaftDirection_Cutter)
     triggerAngle_Deg = vtk.vtkMath().DegreesFromRadians(triggerAngle_Rad)
     
-    #print "triggerAngle_Deg: " + str(triggerAngle_Deg)
-    
-    if triggerAngle_Deg < 86.0:
-      triggerAngle_Deg = 86.0
+    # adjusting values for openAngle calculation 
+    if triggerAngle_Deg < 90.0:
+      triggerAngle_Deg = 90.0
     if triggerAngle_Deg > 102.0:
       triggerAngle_Deg = 102.0
-    
-    openAngle = (triggerAngle_Deg - 86.0) * -2.2
+
+    openAngle = (triggerAngle_Deg - 90.0) * -2.2 # angle of cutter tip to shaft 
+    #print "triggerAngle_Deg: " + str(triggerAngle_Deg), "open ", openAngle #DEBUG
+
     cutterMovingToTipTransform = vtk.vtkTransform()
-    
     # By default transformations occur in reverse order compared to source code line order.
     # Translate center of rotation back to the original position
     cutterMovingToTipTransform.Translate(0,0,-20)
@@ -504,8 +536,83 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     cutterMovingToTipTransform.Translate(0,0,20)
     
     cutterMovingToTip = slicer.mrmlScene.GetFirstNodeByName('CutterMovingToCutterTip')
-    cutterMovingToTip.SetAndObserveTransformToParent(cutterMovingToTipTransform)
+    cutterMovingToTip.SetAndObserveTransformToParent(cutterMovingToTipTransform)   
 
+    # current timestamp is time.time()
+    # save fiducial point every 0.25 seconds 
+    if ( time.time() - self.lastTimestamp) > 0.25: 
+      cutterTipWorld = [0,0,0,0]
+      fiducial = slicer.util.getNode("F")
+      fiducial.GetNthFiducialWorldCoordinates(0,cutterTipWorld) # z coordinate not important for linear slope calculation
+
+      # add path fiducials to separate node
+      self.pathFiducialsNode = slicer.util.getNode('MarkupsFiducial_*')
+      if self.pathFiducialsNode == None:
+        self.pathFiducialsNode = slicer.mrmlScene.CreateNodeByClass('vtkMRMLMarkupsFiducialNode')
+        slicer.mrmlScene.AddNode(self.pathFiducialsNode)
+      slicer.modules.markups.logic().AddFiducial(cutterTipWorld[0], cutterTipWorld[1], cutterTipWorld[2])
+      # set new fiducial's label and hide from 3D view
+      n = self.pathFiducialsNode.GetNumberOfFiducials() - 1
+      self.pathFiducialsNode.SetNthFiducialLabel(n, str(n))
+      self.pathFiducialsNode.SetNthFiducialVisibility(n, 0)  
+
+      self.pathFiducialsX.append(cutterTipWorld[0])
+      self.pathFiducialsY.append(cutterTipWorld[1])
+      self.path.append(cutterTipWorld[:-1])
+      self.lastTimestamp = time.time()
+
+      self.updateAngleMetrics()
+      if self.runTutor and math.fabs(openAngle) < 0.25:
+        self.checkModel()
+        self.updateDistanceMetrics()
+
+
+  def checkModel(self): # check if vessel branch needs to be snipped
+    minDistance = float("inf")
+    index = 0
+    a = self.branchStarts
+    for point in a:
+      cutterTipWorld = [0,0,0,0]
+      fiducial = slicer.util.getNode("F")
+      fiducial.GetNthFiducialWorldCoordinates(0,cutterTipWorld) # cutterTipWorld now holds the coordinates of 
+      distanceToBranch =  self.distance(cutterTipWorld, point) # double check dimensions 
+      if distanceToBranch < minDistance:
+        minDistance = distanceToBranch
+        index = self.branchStarts.index(point) + 1
+
+    
+    branchNode = slicer.util.getNode('Model_' + str(index))
+    polydata = branchNode.GetPolyData()    
+    numVesselPoints = polydata.GetNumberOfPoints()
+    vesselPoints = [ self.distance(self.branchStarts[index], polydata.GetPoint(i)) for i in range(numVesselPoints)]
+    cutDistance = min(vesselPoints)
+
+    if cutDistance < 250:
+      branchDisplayNode = branchNode.GetDisplayNode()
+      branchDisplayNode.SetVisibility(False)
+     
+
+  def npArrayFromVtkMatrix(self, vtkMatrix):
+    npArray = numpy.zeros((4,4))
+    for row in range(4):
+      for column in range(4):
+          npArray[row][column] = vtkMatrix.GetElement(row,column)
+    return npArray
+
+    
+  def updateAngleMetrics(self):
+    vesselModelToVessel = slicer.mrmlScene.GetFirstNodeByName('VesselModelToVessel')  
+    vesselToRas = vtk.vtkMatrix4x4()
+    vesselModelToVessel.GetMatrixTransformToWorld(vesselToRas)
+    vesselDirection = numpy.dot(self.npArrayFromVtkMatrix(vesselToRas), numpy.array([ 0, 0, 1, 0]))
+
+    cutterTipToCutter = slicer.mrmlScene.GetFirstNodeByName('CutterTipToCutter')  
+    cutterToRas = vtk.vtkMatrix4x4()
+    cutterTipToCutter.GetMatrixTransformToWorld(cutterToRas)
+    cutterDirection = numpy.dot(self.npArrayFromVtkMatrix(cutterToRas), numpy.array([ 0, 0, 1, 0]))
+
+    self.calculateVesselToRetractorAngle(vesselDirection, cutterDirection)
+    
 
   def updateDistanceMetrics(self):
     cutterTipWorld = [0,0,0,0]
@@ -551,8 +658,7 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     #ScoliUsLib.SpineRegistration.computeRigidTransformsScaledAtlasToRas(self.perVertebraPointsDict_ScaledAtlas, self.perVertebraScaledAtlasToRasTransforms)
     appender = vtk.vtkAppendPolyData()
     for name, poly in self.modelPolydata.iteritems():
-      '''
-      if name not in self.perVertebraScaledAtlasToRasTransforms:
+      '''if name not in self.perVertebraScaledAtlasToRasTransforms:
         logging.error("Key not found in perVertebraScaledAtlasToRasTransforms dict: {0}".format(name))
         return False
       '''
@@ -594,4 +700,3 @@ class VesselHarvestingTutorTest(ScriptedLoadableModuleTest):
     logic.loadTransforms()
     logic.loadModels()
 
-    
