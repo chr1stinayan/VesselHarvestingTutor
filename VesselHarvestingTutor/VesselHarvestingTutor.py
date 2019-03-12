@@ -659,10 +659,6 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     #ScoliUsLib.SpineRegistration.computeRigidTransformsScaledAtlasToRas(self.perVertebraPointsDict_ScaledAtlas, self.perVertebraScaledAtlasToRasTransforms)
     appender = vtk.vtkAppendPolyData()
     for name, poly in self.modelPolydata.iteritems():
-      '''if name not in self.perVertebraScaledAtlasToRasTransforms:
-        logging.error("Key not found in perVertebraScaledAtlasToRasTransforms dict: {0}".format(name))
-        return False
-      '''
       transformFilter = vtk.vtkTransformPolyDataFilter()
       transformFilter.SetTransform(self.modelPolydata[name])
       transformFilter.SetInputData(poly)
