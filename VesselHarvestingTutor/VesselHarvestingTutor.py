@@ -380,7 +380,6 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
     stylusTipToStylus.SetAndObserveTransformNodeID(cutterToRetractorID)
 
   def loadModels(self):
-    #TODO: add model polydata to self.modelsPOlydata
     moduleDir = os.path.dirname(slicer.modules.vesselharvestingtutor.path)
 
     skeletonModel = slicer.util.getNode(self.SKELETON_MODEL_NAME)
@@ -395,27 +394,28 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
         fiducialFilename = 'Points_' + str(i) + '.fcsv'
         fiducialFilePath = os.path.join(moduleDir, os.pardir,'CadModels/vessel', fiducialFilename)
         slicer.util.loadMarkupsFiducialList(fiducialFilePath)
-        fiducialNode = slicer.util.getNode('Points_' + str(i))
-        if fiducialNode != None: 
-          # create models
-          outputModel = slicer.mrmlScene.AddNode(slicer.vtkMRMLModelNode())
-          outputModel.CreateDefaultDisplayNodes()
-          outputModel.SetName('Model_' + str(i))
-          outputModel.GetDisplayNode().SetSliceIntersectionVisibility(True)
-          outputModel.GetDisplayNode().SetColor(1,0,0)
+        fiducialNode = slicer.util.getNode('Points_' + str(i))         
 
-          markupsToModel = slicer.mrmlScene.AddNode(slicer.vtkMRMLMarkupsToModelNode())
-          markupsToModel.SetAutoUpdateOutput(True)
-          markupsToModel.SetAndObserveModelNodeID(outputModel.GetID())
-          markupsToModel.SetAndObserveMarkupsNodeID(fiducialNode.GetID())
-          markupsToModel.SetModelType(slicer.vtkMRMLMarkupsToModelNode.Curve)
-          markupsToModel.SetCurveType(slicer.vtkMRMLMarkupsToModelNode.CardinalSpline)
+        # create models
+        outputModel = slicer.mrmlScene.AddNode(slicer.vtkMRMLModelNode())
+        outputModel.CreateDefaultDisplayNodes()
+        outputModel.SetName('Model_' + str(i))
+        outputModel.GetDisplayNode().SetSliceIntersectionVisibility(True)
+        outputModel.GetDisplayNode().SetColor(1,0,0)
+        self.modelPolydata['Model_' + str(i)] = outputModel.GetPolyData()
 
-          if i == 0:
-            self.vesselModel = outputModel
-            markupsToModel.SetTubeRadius(5)
-          else:
-            markupsToModel.SetTubeRadius(2)
+        markupsToModel = slicer.mrmlScene.AddNode(slicer.vtkMRMLMarkupsToModelNode())
+        markupsToModel.SetAutoUpdateOutput(True)
+        markupsToModel.SetAndObserveModelNodeID(outputModel.GetID())
+        markupsToModel.SetAndObserveMarkupsNodeID(fiducialNode.GetID())
+        markupsToModel.SetModelType(slicer.vtkMRMLMarkupsToModelNode.Curve)
+        markupsToModel.SetCurveType(slicer.vtkMRMLMarkupsToModelNode.CardinalSpline)
+
+        if i == 0:
+          self.vesselModel = outputModel
+          markupsToModel.SetTubeRadius(5)
+        else:
+          markupsToModel.SetTubeRadius(2)
 
 
     # initialize array with first point of each branch
@@ -472,8 +472,9 @@ class VesselHarvestingTutorLogic(ScriptedLoadableModuleLogic):
       else:
         self.vesselModelToVessel.SetName("VesselModelToVessel")
     vesselToRetractor = slicer.util.getNode('VesselToRetractor')
-
+    
     vesselID = self.vesselModelToVessel.GetID()
+    skeletonModel.SetAndObserveTransformNodeID(vesselID)
     for i in range(NUM_MODELS): 
       branchName = 'Points_' + str(i)
       branchNode = slicer.util.getNode(branchName)
